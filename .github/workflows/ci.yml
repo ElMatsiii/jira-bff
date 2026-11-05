@@ -1,0 +1,41 @@
+name: CI jira-bff
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'jira-bff/package.json'
+
+      - name: Install Contracts Dependencies
+        working-directory: jira-contracts
+        run: npm ci
+
+      - name: Build Contracts
+        working-directory: jira-contracts
+        run: npm run build
+
+      - name: Install BFF Dependencies
+        working-directory: jira-bff
+        run: npm ci
+
+      - name: Run Tests with Coverage
+        working-directory: jira-bff
+        run: npm run test:coverage
+
+      - name: Build Application
+        working-directory: jira-bff
+        run: npm run build
