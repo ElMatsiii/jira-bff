@@ -12,7 +12,7 @@ async function bootstrap() {
   const port = configService.port;
 
   await app.listen(port);
-  logger.log(`🚀 Jira AI BFF Gateway is running on: http://localhost:${port}/graphql`);
+  logger.log(`Jira AI BFF Gateway is running on: http://localhost:${port}/graphql`);
 }
 
 bootstrap().catch((err) => {

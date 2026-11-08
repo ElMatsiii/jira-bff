@@ -1,4 +1,4 @@
-# 🚀 BFF API Gateway (`jira-bff`)
+# BFF API Gateway (`jira-bff`)
 
 [![Node Version](https://img.shields.io/badge/Node-v20+-green.svg?logo=nodedotjs)]()
 [![NestJS](https://img.shields.io/badge/NestJS-v10-ea2849.svg?logo=nestjs)]()
@@ -10,18 +10,18 @@ Puerta de enlace unificada (**Backend-for-Frontend / API Gateway**) implementada
 
 ---
 
-## 🏛️ Rol en la Arquitectura y Orquestación
+## Rol en la Arquitectura y Orquestación
 
 El BFF es el componente central de enrutamiento que aísla la complejidad de los microservicios backend:
 
 ```mermaid
 flowchart TD
-    WEB["💻 Frontend Web SPA\n(Apollo Client :5173 / :80)"] -->|"GraphQL HTTP\nPOST /graphql"| BFF["🚀 jira-bff\n(NestJS Gateway :4000)"]
+    WEB["Frontend Web SPA\n(Apollo Client :5173 / :80)"] -->|"GraphQL HTTP\nPOST /graphql"| BFF["jira-bff\n(NestJS Gateway :4000)"]
     
-    BFF -->|"1. gRPC :50051"| GO["🔷 MS1: Issues (Go)"]
-    BFF -->|"2. gRPC :50052"| NEST["🔶 MS2: Sprints (NestJS)"]
-    BFF -->|"3. Kafka Request-Reply"| NET["🟣 MS3: Analytics (.NET 8)"]
-    BFF -->|"4. HTTP REST :3000"| MCP["🤖 AI MCP Agent (Gemini 2.0)"]
+    BFF -->|"1. gRPC :50051"| GO["MS1: Issues (Go)"]
+    BFF -->|"2. gRPC :50052"| NEST["MS2: Sprints (NestJS)"]
+    BFF -->|"3. Kafka Request-Reply"| NET["MS3: Analytics (.NET 8)"]
+    BFF -->|"4. HTTP REST :3000"| MCP["AI MCP Agent (Gemini 2.0)"]
 ```
 
 ### Protocolos de Entrada y Salida (Regla de la Pizarra)
@@ -35,7 +35,7 @@ flowchart TD
 
 ---
 
-## 📂 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```text
 jira-bff/
@@ -64,7 +64,7 @@ jira-bff/
 
 ---
 
-## ⚙️ Variables de Entorno
+## Variables de Entorno
 
 | Variable | Descripción | Valor por Defecto |
 | :--- | :--- | :--- |
@@ -76,7 +76,7 @@ jira-bff/
 
 ---
 
-## 🧪 Pruebas Automatizadas y Cobertura
+## Pruebas Automatizadas y Cobertura
 
 El BFF incluye pruebas unitarias y de integración para todos sus resolvers y adaptadores de transporte:
 
@@ -100,7 +100,7 @@ npm test
 
 ---
 
-## 🐳 Despliegue con Docker
+## Despliegue con Docker
 
 ```bash
 # Compilar imagen Docker
@@ -117,6 +117,6 @@ docker run -d -p 4000:4000 \
 
 ---
 
-## 📄 Licencia
+## Licencia
 
-MIT License © 2026 Jira AI Team.
+MIT License (c) 2026 Jira AI Team.
