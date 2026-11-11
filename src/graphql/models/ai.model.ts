@@ -1,4 +1,4 @@
-import { Field, Int, ObjectType } from '@nestjs/graphql';
+import { Field, Float, Int, ObjectType } from '@nestjs/graphql';
 
 @ObjectType('AiStory')
 export class AiStoryModel {
@@ -58,4 +58,22 @@ export class AiDiagnosisModel {
 
   @Field(() => [String])
   recommendations: string[];
+}
+
+@ObjectType()
+export class AiStoryImprovementModel {
+  @Field(() => Int)
+  storyPoints: number;
+
+  @Field(() => Float)
+  confidence: number;
+
+  @Field()
+  reasoning: string;
+
+  @Field(() => [String])
+  complexityFactors: string[];
+
+  @Field()
+  acceptanceCriteriaGherkin: string;
 }

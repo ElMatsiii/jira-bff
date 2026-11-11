@@ -39,3 +39,12 @@ export class UpdateIssueStatusInput {
   @Field(() => IssueStatusEnum)
   status: IssueStatusEnum;
 }
+
+@InputType()
+export class AssignIssuesToSprintInput {
+  @Field()
+  sprintId: string;
+
+  @Field(() => [String])
+  issueIds: string[];
+}

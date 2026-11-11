@@ -32,12 +32,10 @@ describe('McpAgentClient', () => {
     expect(result.stories.length).toBe(1);
   });
 
-  it('should fallback gracefully when decompose-epic fails', async () => {
+  it('should report the failure when decompose-epic is unavailable', async () => {
     mockedAxios.post.mockRejectedValueOnce(new Error('Network error'));
 
-    const result = await client.decomposeEpic({ epicTitle: 'Fallback Epic' });
-    expect(result.epicTitle).toBe('Fallback Epic');
-    expect(result.stories.length).toBeGreaterThanOrEqual(3);
+    await expect(client.decomposeEpic({ epicTitle: 'Unavailable Epic' })).rejects.toThrow('Network error');
   });
 
   it('should call plan-sprint and return response on success', async () => {
@@ -56,16 +54,14 @@ describe('McpAgentClient', () => {
     expect(result.allocatedStoryPoints).toBe(15);
   });
 
-  it('should fallback gracefully when plan-sprint fails', async () => {
+  it('should report the failure when plan-sprint is unavailable', async () => {
     mockedAxios.post.mockRejectedValueOnce(new Error('Network error'));
 
-    const result = await client.planSprint({
+    await expect(client.planSprint({
       sprintGoal: 'Goal',
       teamCapacityStoryPoints: 20,
-      candidateIssues: [{ id: 'iss-1', storyPoints: 5 }],
-    });
-    expect(result.allocatedStoryPoints).toBe(5);
-    expect(result.recommendedIssueIds).toContain('iss-1');
+      candidateIssues: [{ id: 'iss-1', title: 'Issue', storyPoints: 5, priority: 2 }],
+    })).rejects.toThrow('Network error');
   });
 
   it('should call diagnose-metrics and return response on success', async () => {
@@ -82,11 +78,9 @@ describe('McpAgentClient', () => {
     expect(result.healthStatus).toBe('HEALTHY');
   });
 
-  it('should fallback gracefully when diagnose-metrics fails', async () => {
+  it('should report the failure when diagnose-metrics is unavailable', async () => {
     mockedAxios.post.mockRejectedValueOnce(new Error('Network error'));
 
-    const result = await client.diagnoseMetrics({ sprintId: 'sprint-1', blockedIssuesCount: 3 });
-    expect(result.healthStatus).toBe('AT_RISK');
-    expect(result.rootCauses.length).toBeGreaterThan(0);
+    await expect(client.diagnoseMetrics({ sprintId: 'sprint-1', blockedIssuesCount: 3 })).rejects.toThrow('Network error');
   });
 });

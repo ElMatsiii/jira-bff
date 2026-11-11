@@ -10,6 +10,10 @@ import { IssuesResolver } from './graphql/resolvers/issues.resolver';
 import { SprintsResolver } from './graphql/resolvers/sprints.resolver';
 import { AnalyticsResolver } from './graphql/resolvers/analytics.resolver';
 import { AiResolver } from './graphql/resolvers/ai.resolver';
+import { IdentityDatabase } from './identity/database.service';
+import { IdentityResolver } from './identity/identity.resolver';
+import { IdentityService } from './identity/identity.service';
+import { GqlAuthGuard } from './identity/gql-auth.guard';
 
 @Module({
   imports: [
@@ -19,6 +23,7 @@ import { AiResolver } from './graphql/resolvers/ai.resolver';
       autoSchemaFile: true,
       playground: true,
       path: '/graphql',
+      context: ({ req }) => ({ req }),
     }),
   ],
   providers: [
@@ -30,6 +35,10 @@ import { AiResolver } from './graphql/resolvers/ai.resolver';
     SprintsResolver,
     AnalyticsResolver,
     AiResolver,
+    IdentityDatabase,
+    IdentityService,
+    GqlAuthGuard,
+    IdentityResolver,
   ],
 })
 export class AppModule {}

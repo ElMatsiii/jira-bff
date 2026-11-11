@@ -10,7 +10,7 @@ RUN npm ci && npm run build
 
 WORKDIR /app
 COPY jira-bff/package*.json ./
-RUN npm install
+RUN npm ci
 
 COPY jira-bff/ ./
 RUN npm run build
@@ -23,7 +23,7 @@ ENV NODE_ENV=production
 
 COPY --from=builder /jira-contracts /jira-contracts
 COPY jira-bff/package*.json ./
-RUN npm install --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts
 
 COPY --from=builder /app/dist ./dist
 

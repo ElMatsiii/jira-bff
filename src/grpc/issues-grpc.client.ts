@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Optional } from '@nestjs/common';
-import * as grpc from '@grpc/grpc-js';
 import { ConfigService } from '../config/config.service';
+import { createInsecureGrpcCredentials } from 'jira-contracts';
 import {
   IssueServiceClient,
   Issue,
@@ -12,6 +12,8 @@ import {
   ListIssuesResponse,
   UpdateIssueStatusRequest,
   UpdateIssueStatusResponse,
+  BatchUpdateIssueSprintRequest,
+  BatchUpdateIssueSprintResponse,
 } from 'jira-contracts/gen/ts';
 
 @Injectable()
@@ -37,7 +39,7 @@ export class IssuesGrpcClient implements OnModuleInit, OnModuleDestroy {
     try {
       this.client = new IssueServiceClient(
         url,
-        grpc.credentials.createInsecure() as any,
+        createInsecureGrpcCredentials(),
         {
           'grpc.keepalive_time_ms': 30000,
           'grpc.keepalive_timeout_ms': 5000,
@@ -112,6 +114,20 @@ export class IssuesGrpcClient implements OnModuleInit, OnModuleDestroy {
         if (err) return reject(err);
         resolve(res.issue);
       });
+    });
+  }
+
+  async assignIssuesToSprint(issueIds: string[], sprintId: string): Promise<Issue[]> {
+    return new Promise((resolve, reject) => {
+      if (!this.client) return reject(new Error('Issues gRPC client not initialized'));
+      const request: BatchUpdateIssueSprintRequest = { issueIds, sprintId };
+      this.client.batchUpdateIssueSprint(
+        request,
+        (err: any, response: BatchUpdateIssueSprintResponse) => {
+          if (err) return reject(err);
+          resolve(response.issues || []);
+        },
+      );
     });
   }
 }

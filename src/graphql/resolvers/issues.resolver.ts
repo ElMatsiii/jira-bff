@@ -1,30 +1,51 @@
-import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, ID, Context } from '@nestjs/graphql';
+import { BadRequestException, UseGuards } from '@nestjs/common';
+import { Request } from 'express';
 import { IssuesGrpcClient } from '../../grpc/issues-grpc.client';
 import { IssueModel, IssueStatusEnum } from '../models/issue.model';
-import { CreateIssueInput, UpdateIssueStatusInput } from '../dto/issue.inputs';
+import { AssignIssuesToSprintInput, CreateIssueInput, UpdateIssueStatusInput } from '../dto/issue.inputs';
 import { CreateIssueRequest, Issue } from 'jira-contracts/gen/ts';
+import { GqlAuthGuard } from '../../identity/gql-auth.guard';
+import { IdentityService } from '../../identity/identity.service';
+import { UserModel } from '../../identity/identity.models';
+import { SprintsGrpcClient } from '../../grpc/sprints-grpc.client';
 
 @Resolver(() => IssueModel)
+@UseGuards(GqlAuthGuard)
 export class IssuesResolver {
-  constructor(private readonly issuesClient: IssuesGrpcClient) {}
+  constructor(
+    private readonly issuesClient: IssuesGrpcClient,
+    private readonly identity: IdentityService,
+    private readonly sprintsClient: SprintsGrpcClient,
+  ) {}
 
   @Query(() => IssueModel, { name: 'getIssue' })
-  async getIssue(@Args('id', { type: () => ID }) id: string): Promise<IssueModel> {
+  async getIssue(
+    @Args('id', { type: () => ID }) id: string,
+    @Context('req') request: Request & { user: UserModel },
+  ): Promise<IssueModel> {
     const issue = await this.issuesClient.getIssue(id);
+    await this.identity.assertProjectAccess(request.user.id, issue.projectId);
     return this.mapToModel(issue);
   }
 
   @Query(() => [IssueModel], { name: 'listIssues' })
   async listIssues(
     @Args('projectId') projectId: string,
-    @Args('sprintId', { nullable: true }) sprintId?: string,
+    @Args('sprintId', { nullable: true }) sprintId: string | undefined,
+    @Context('req') request: Request & { user: UserModel },
   ): Promise<IssueModel[]> {
+    await this.identity.assertProjectAccess(request.user.id, projectId);
     const issues = await this.issuesClient.listIssues(projectId, sprintId);
     return (issues || []).map((i) => this.mapToModel(i));
   }
 
   @Mutation(() => IssueModel, { name: 'createIssue' })
-  async createIssue(@Args('input') input: CreateIssueInput): Promise<IssueModel> {
+  async createIssue(
+    @Args('input') input: CreateIssueInput,
+    @Context('req') request: Request & { user: UserModel },
+  ): Promise<IssueModel> {
+    await this.identity.assertProjectAccess(request.user.id, input.projectId);
     const req: CreateIssueRequest = {
       projectId: input.projectId,
       title: input.title,
@@ -34,7 +55,7 @@ export class IssuesResolver {
       storyPoints: input.storyPoints || 0,
       sprintId: input.sprintId || '',
       assigneeId: input.assigneeId || '',
-      reporterId: 'user-default',
+      reporterId: request.user.id,
       acceptanceCriteria: input.acceptanceCriteria || '',
     };
     const issue = await this.issuesClient.createIssue(req);
@@ -42,9 +63,30 @@ export class IssuesResolver {
   }
 
   @Mutation(() => IssueModel, { name: 'updateIssueStatus' })
-  async updateIssueStatus(@Args('input') input: UpdateIssueStatusInput): Promise<IssueModel> {
+  async updateIssueStatus(
+    @Args('input') input: UpdateIssueStatusInput,
+    @Context('req') request: Request & { user: UserModel },
+  ): Promise<IssueModel> {
+    const currentIssue = await this.issuesClient.getIssue(input.id);
+    await this.identity.assertProjectAccess(request.user.id, currentIssue.projectId);
     const issue = await this.issuesClient.updateIssueStatus(input.id, input.status as number);
     return this.mapToModel(issue);
+  }
+
+  @Mutation(() => [IssueModel], { name: 'assignIssuesToSprint' })
+  async assignIssuesToSprint(
+    @Args('input') input: AssignIssuesToSprintInput,
+    @Context('req') request: Request & { user: UserModel },
+  ): Promise<IssueModel[]> {
+    if (!input.issueIds.length) return [];
+    const sprint = await this.sprintsClient.getSprint(input.sprintId);
+    await this.identity.assertProjectAccess(request.user.id, sprint.projectId);
+    const issues = await Promise.all(input.issueIds.map((id) => this.issuesClient.getIssue(id)));
+    if (issues.some((issue) => issue.projectId !== sprint.projectId)) {
+      throw new BadRequestException('Todas las historias deben pertenecer al proyecto del sprint.');
+    }
+    const updated = await this.issuesClient.assignIssuesToSprint(input.issueIds, input.sprintId);
+    return updated.map((issue) => this.mapToModel(issue));
   }
 
   private mapToModel(issue: Issue): IssueModel {

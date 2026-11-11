@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Optional } from '@nestjs/common';
-import * as grpc from '@grpc/grpc-js';
 import { ConfigService } from '../config/config.service';
+import { createInsecureGrpcCredentials } from 'jira-contracts';
 import {
   SprintServiceClient,
   Sprint,
@@ -39,7 +39,7 @@ export class SprintsGrpcClient implements OnModuleInit, OnModuleDestroy {
     try {
       this.client = new SprintServiceClient(
         url,
-        grpc.credentials.createInsecure() as any,
+        createInsecureGrpcCredentials(),
         {
           'grpc.keepalive_time_ms': 30000,
           'grpc.keepalive_timeout_ms': 5000,

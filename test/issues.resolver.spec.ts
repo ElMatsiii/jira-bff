@@ -1,6 +1,7 @@
 import { IssuesResolver } from '../src/graphql/resolvers/issues.resolver';
 import { IssuesGrpcClient } from '../src/grpc/issues-grpc.client';
 import { IssueStatusEnum } from '../src/graphql/models/issue.model';
+import { IdentityService } from '../src/identity/identity.service';
 
 describe('IssuesResolver', () => {
   let resolver: IssuesResolver;
@@ -9,7 +10,7 @@ describe('IssuesResolver', () => {
   const sampleIssue = {
     id: 'issue-1',
     key: 'PROJ-1',
-    project_id: 'proj-1',
+    projectId: 'proj-1',
     title: 'Test Issue',
     description: 'Description',
     status: 1,
@@ -31,11 +32,14 @@ describe('IssuesResolver', () => {
       createIssue: jest.fn().mockResolvedValue(sampleIssue),
       updateIssueStatus: jest.fn().mockResolvedValue({ ...sampleIssue, status: 2 }),
     };
-    resolver = new IssuesResolver(mockClient as any);
+    resolver = new IssuesResolver(
+      mockClient as any,
+      { assertProjectAccess: jest.fn().mockResolvedValue(undefined) } as unknown as IdentityService,
+    );
   });
 
   it('should get an issue by id', async () => {
-    const result = await resolver.getIssue('issue-1');
+    const result = await resolver.getIssue('issue-1', { user: { id: 'user-1' } } as any);
     expect(result.id).toBe('issue-1');
     expect(result.title).toBe('Test Issue');
     expect(result.status).toBe(IssueStatusEnum.TODO);
@@ -43,7 +47,7 @@ describe('IssuesResolver', () => {
   });
 
   it('should list issues by projectId and sprintId', async () => {
-    const result = await resolver.listIssues('proj-1', 'sprint-1');
+    const result = await resolver.listIssues('proj-1', 'sprint-1', { user: { id: 'user-1' } } as any);
     expect(result.length).toBe(1);
     expect(result[0].id).toBe('issue-1');
     expect(mockClient.listIssues).toHaveBeenCalledWith('proj-1', 'sprint-1');
@@ -55,7 +59,7 @@ describe('IssuesResolver', () => {
       title: 'New Issue',
       storyPoints: 5,
     };
-    const result = await resolver.createIssue(input);
+    const result = await resolver.createIssue(input, { user: { id: 'user-1' } } as any);
     expect(result.id).toBe('issue-1');
     expect(mockClient.createIssue).toHaveBeenCalled();
   });
@@ -65,7 +69,7 @@ describe('IssuesResolver', () => {
       id: 'issue-1',
       status: IssueStatusEnum.IN_PROGRESS,
     };
-    const result = await resolver.updateIssueStatus(input);
+    const result = await resolver.updateIssueStatus(input, { user: { id: 'user-1' } } as any);
     expect(result.status).toBe(IssueStatusEnum.IN_PROGRESS);
     expect(mockClient.updateIssueStatus).toHaveBeenCalledWith('issue-1', 2);
   });
