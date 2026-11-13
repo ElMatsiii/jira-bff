@@ -38,6 +38,19 @@ describe('AiResolver', () => {
         rootCauses: ['Stable velocity'],
         recommendations: ['Maintain pace'],
       }),
+      breakdownTask: jest.fn().mockResolvedValue({
+        parentTitle: 'Crear base de la web',
+        subtasks: [
+          {
+            title: 'Crear frontend',
+            description: 'Estructura inicial',
+            type: 'TASK',
+            priority: 'HIGH',
+            estimatedStoryPoints: 3,
+            acceptanceCriteriaGherkin: 'Given front When init Then ok',
+          },
+        ],
+      }),
     };
 
     mockIssuesClient = {
@@ -99,6 +112,22 @@ describe('AiResolver', () => {
       sprintId: 'sprint-1',
       blockedIssuesCount: 0,
       alerts: ['No hay horas de trabajo registradas todavía; no se puede evaluar el uso del tiempo con datos reales.'],
+    });
+  });
+
+  it('should breakdown prospective task into subtasks using AI', async () => {
+    const input = {
+      projectId: 'project-1',
+      title: 'Crear base de la web',
+      description: 'Estructura inicial',
+    };
+    const result = await resolver.aiBreakdownTask(input, { user: { id: 'user-1' } } as any);
+    expect(result.parentTitle).toBe('Crear base de la web');
+    expect(result.subtasks.length).toBe(1);
+    expect(result.subtasks[0].title).toBe('Crear frontend');
+    expect(mockMcpClient.breakdownTask).toHaveBeenCalledWith({
+      title: 'Crear base de la web',
+      description: 'Estructura inicial',
     });
   });
 });

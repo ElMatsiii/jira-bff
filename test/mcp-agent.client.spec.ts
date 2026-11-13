@@ -83,4 +83,24 @@ describe('McpAgentClient', () => {
 
     await expect(client.diagnoseMetrics({ sprintId: 'sprint-1', blockedIssuesCount: 3 })).rejects.toThrow('Network error');
   });
+
+  it('should call breakdown-task and return response on success', async () => {
+    const mockBreakdown = {
+      parentTitle: 'Crear base web',
+      subtasks: [
+        {
+          title: 'Crear frontend',
+          description: 'Estructura inicial',
+          type: 'TASK',
+          priority: 'HIGH',
+          estimatedStoryPoints: 3,
+        },
+      ],
+    };
+    mockedAxios.post.mockResolvedValueOnce({ data: mockBreakdown });
+
+    const result = await client.breakdownTask({ title: 'Crear base web' });
+    expect(result.parentTitle).toBe('Crear base web');
+    expect(result.subtasks.length).toBe(1);
+  });
 });

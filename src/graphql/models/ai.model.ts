@@ -77,3 +77,33 @@ export class AiStoryImprovementModel {
   @Field()
   acceptanceCriteriaGherkin: string;
 }
+
+@ObjectType('AiSuggestedSubtask')
+export class AiSuggestedSubtaskModel {
+  @Field()
+  title: string;
+
+  @Field()
+  description: string;
+
+  @Field()
+  type: string;
+
+  @Field()
+  priority: string;
+
+  @Field(() => Int)
+  estimatedStoryPoints: number;
+
+  @Field({ nullable: true })
+  acceptanceCriteriaGherkin?: string;
+}
+
+@ObjectType('AiBreakdownTask')
+export class AiBreakdownTaskModel {
+  @Field()
+  parentTitle: string;
+
+  @Field(() => [AiSuggestedSubtaskModel])
+  subtasks: AiSuggestedSubtaskModel[];
+}

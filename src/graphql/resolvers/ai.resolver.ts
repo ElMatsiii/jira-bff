@@ -4,8 +4,8 @@ import { Request } from 'express';
 import { McpAgentClient } from '../../mcp/mcp-agent.client';
 import { IssuesGrpcClient } from '../../grpc/issues-grpc.client';
 import { SprintsGrpcClient } from '../../grpc/sprints-grpc.client';
-import { AiDecompositionModel, AiSprintPlanModel, AiDiagnosisModel, AiStoryImprovementModel } from '../models/ai.model';
-import { DecomposeEpicInput, PlanSprintInput, DiagnoseMetricsInput, ImproveStoryInput } from '../dto/ai.inputs';
+import { AiDecompositionModel, AiSprintPlanModel, AiDiagnosisModel, AiStoryImprovementModel, AiBreakdownTaskModel } from '../models/ai.model';
+import { DecomposeEpicInput, PlanSprintInput, DiagnoseMetricsInput, ImproveStoryInput, BreakdownTaskInput } from '../dto/ai.inputs';
 import { GqlAuthGuard } from '../../identity/gql-auth.guard';
 import { IdentityService } from '../../identity/identity.service';
 import { UserModel } from '../../identity/identity.models';
@@ -130,5 +130,29 @@ export class AiResolver {
       description: input.description,
       type: input.type || 'STORY',
     });
+  }
+
+  @Mutation(() => AiBreakdownTaskModel, { name: 'aiBreakdownTask' })
+  async aiBreakdownTask(
+    @Args('input') input: BreakdownTaskInput,
+    @Context('req') request: Request & { user: UserModel },
+  ): Promise<AiBreakdownTaskModel> {
+    await this.identity.assertProjectAccess(request.user.id, input.projectId);
+    const res = await this.mcpClient.breakdownTask({
+      title: input.title,
+      description: input.description,
+    });
+
+    return {
+      parentTitle: res.parentTitle || input.title,
+      subtasks: (res.subtasks || []).map((st) => ({
+        title: st.title,
+        description: st.description || '',
+        type: st.type || 'TASK',
+        priority: st.priority || 'MEDIUM',
+        estimatedStoryPoints: st.estimatedStoryPoints || 3,
+        acceptanceCriteriaGherkin: st.acceptanceCriteriaGherkin || '',
+      })),
+    };
   }
 }

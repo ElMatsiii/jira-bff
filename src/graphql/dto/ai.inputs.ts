@@ -56,3 +56,15 @@ export class ImproveStoryInput {
   @Field({ nullable: true, defaultValue: 'STORY' })
   type?: string;
 }
+
+@InputType()
+export class BreakdownTaskInput {
+  @Field()
+  projectId: string;
+
+  @Field()
+  title: string;
+
+  @Field({ nullable: true })
+  description?: string;
+}

@@ -40,6 +40,20 @@ export interface AiStoryImprovementResult {
   acceptanceCriteriaGherkin: string;
 }
 
+export interface AiSuggestedSubtask {
+  title: string;
+  description: string;
+  type: string;
+  priority: string;
+  estimatedStoryPoints: number;
+  acceptanceCriteriaGherkin?: string;
+}
+
+export interface AiBreakdownTaskResult {
+  parentTitle: string;
+  subtasks: AiSuggestedSubtask[];
+}
+
 @Injectable()
 export class McpAgentClient {
   constructor(@Optional() private readonly configService?: ConfigService) {}
@@ -78,6 +92,15 @@ export class McpAgentClient {
 
   async improveStory(input: { title: string; description?: string; type: string }): Promise<AiStoryImprovementResult> {
     const response = await axios.post(`${this.baseUrl}/agent/improve-story`, input, { timeout: 15000 });
+    return response.data;
+  }
+
+  async breakdownTask(input: {
+    title: string;
+    description?: string;
+    projectKey?: string;
+  }): Promise<AiBreakdownTaskResult> {
+    const response = await axios.post(`${this.baseUrl}/agent/breakdown-task`, input, { timeout: 15000 });
     return response.data;
   }
 }
