@@ -18,6 +18,12 @@ export function normalizeAiPriority(value: unknown): string {
   return (AI_PRIORITIES as readonly string[]).includes(upper) ? upper : 'MEDIUM';
 }
 
+/** Converts MS1's proto IssuePriority number (1..4) to the name the agent expects; unknown → MEDIUM. */
+export function protoPriorityToName(value: unknown): string {
+  const byNumber: Record<number, string> = { 1: 'LOW', 2: 'MEDIUM', 3: 'HIGH', 4: 'CRITICAL' };
+  return typeof value === 'number' ? byNumber[value] ?? 'MEDIUM' : normalizeAiPriority(value);
+}
+
 @Resolver()
 @UseGuards(GqlAuthGuard)
 export class AiResolver {
@@ -59,7 +65,7 @@ export class AiResolver {
     @Context('req') request: Request & { user: UserModel },
   ): Promise<AiSprintPlanModel> {
     await this.identity.assertProjectAccess(request.user.id, input.projectId);
-    let candidateIssues: { id: string; title: string; storyPoints: number; priority: number }[] = [];
+    let candidateIssues: { id: string; title: string; storyPoints: number; priority: string }[] = [];
     if (input.candidateIssueIds && input.candidateIssueIds.length > 0) {
       const issuePromises = input.candidateIssueIds.map((id) =>
         this.issuesClient.getIssue(id).catch(() => null),
@@ -76,7 +82,8 @@ export class AiResolver {
           id: i.id,
           title: i.title,
           storyPoints: i.storyPoints,
-          priority: i.priority,
+          // The agent validates priority as LOW | MEDIUM | HIGH | CRITICAL; MS1 sends the proto number.
+          priority: protoPriorityToName(i.priority),
         }));
     }
 
@@ -87,10 +94,11 @@ export class AiResolver {
     });
 
     return {
-      sprintGoal: res.sprintGoal,
-      allocatedStoryPoints: res.allocatedStoryPoints,
-      recommendedIssueIds: res.recommendedIssueIds,
-      riskAssessment: res.riskAssessment,
+      // The agent does not echo the goal, and the GraphQL field is non-null.
+      sprintGoal: res.sprintGoal || input.sprintGoal,
+      allocatedStoryPoints: Number(res.allocatedStoryPoints) || 0,
+      recommendedIssueIds: Array.isArray(res.recommendedIssueIds) ? res.recommendedIssueIds : [],
+      riskAssessment: res.riskAssessment || 'MEDIUM',
     };
   }
 
@@ -134,11 +142,30 @@ export class AiResolver {
     @Context('req') request: Request & { user: UserModel },
   ): Promise<AiStoryImprovementModel> {
     await this.identity.assertProjectAccess(request.user.id, input.projectId);
-    return this.mcpClient.improveStory({
+    const res = await this.mcpClient.improveStory({
       title: input.title,
       description: input.description,
       type: input.type || 'STORY',
     });
+
+    // Map field by field: a missing value must become a clear error, not a GraphQL non-null violation.
+    const storyPoints = Number(res?.storyPoints);
+    const gherkin = typeof res?.acceptanceCriteriaGherkin === 'string' ? res.acceptanceCriteriaGherkin.trim() : '';
+    if (!Number.isInteger(storyPoints) || storyPoints < 0 || !gherkin) {
+      throw new InternalServerErrorException(
+        'El agente de IA devolvió una propuesta incompleta (faltan los story points o los criterios de aceptación).',
+      );
+    }
+    const confidence = Number(res.confidence);
+    return {
+      storyPoints,
+      confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0,
+      reasoning: typeof res.reasoning === 'string' ? res.reasoning : '',
+      complexityFactors: Array.isArray(res.complexityFactors)
+        ? res.complexityFactors.filter((factor): factor is string => typeof factor === 'string')
+        : [],
+      acceptanceCriteriaGherkin: gherkin,
+    };
   }
 
   @Mutation(() => AiBreakdownTaskModel, { name: 'aiBreakdownTask' })
@@ -158,7 +185,7 @@ export class AiResolver {
         title: st.title,
         description: st.description || '',
         type: st.type || 'TASK',
-        priority: st.priority || 'MEDIUM',
+        priority: normalizeAiPriority(st.priority),
         estimatedStoryPoints: st.estimatedStoryPoints || 3,
         acceptanceCriteriaGherkin: st.acceptanceCriteriaGherkin || '',
       })),

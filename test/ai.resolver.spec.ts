@@ -1,4 +1,4 @@
-import { AiResolver, normalizeAiPriority } from '../src/graphql/resolvers/ai.resolver';
+import { AiResolver, normalizeAiPriority, protoPriorityToName } from '../src/graphql/resolvers/ai.resolver';
 import { McpAgentClient } from '../src/mcp/mcp-agent.client';
 import { IssuesGrpcClient } from '../src/grpc/issues-grpc.client';
 import { SprintsGrpcClient } from '../src/grpc/sprints-grpc.client';
@@ -157,6 +157,117 @@ describe('AiResolver', () => {
     expect(mockMcpClient.breakdownTask).toHaveBeenCalledWith({
       title: 'Crear base de la web',
       description: 'Estructura inicial',
+    });
+  });
+
+  it('normalizes subtask priorities from the agent', async () => {
+    (mockMcpClient.breakdownTask as jest.Mock).mockResolvedValueOnce({
+      parentTitle: 'Web',
+      subtasks: [
+        { title: 'a', description: 'd', type: 'TASK', priority: 'high', estimatedStoryPoints: 3 },
+        { title: 'b', description: 'd', type: 'TASK', priority: 'URGENT', estimatedStoryPoints: 3 },
+      ],
+    });
+    const result = await resolver.aiBreakdownTask({ projectId: 'project-1', title: 'Web' }, { user: { id: 'user-1' } } as any);
+    expect(result.subtasks.map((s) => s.priority)).toEqual(['HIGH', 'MEDIUM']);
+  });
+
+  describe('aiPlanSprint alignment with the agent', () => {
+    it('sends candidate priorities as names and falls back to the requested sprintGoal', async () => {
+      (mockMcpClient.planSprint as jest.Mock).mockResolvedValueOnce({
+        allocatedStoryPoints: 5,
+        capacityUtilizationPercent: 50,
+        recommendedIssueIds: ['issue-1'],
+        riskAssessment: 'LOW',
+        rationale: 'ok',
+      });
+      (mockIssuesClient.getIssue as jest.Mock).mockResolvedValueOnce({
+        id: 'issue-1', title: 'Issue 1', storyPoints: 5, priority: 4, projectId: 'project-1',
+      });
+
+      const result = await resolver.aiPlanSprint(
+        { projectId: 'project-1', sprintGoal: 'Entregar pagos', teamCapacityStoryPoints: 10, candidateIssueIds: ['issue-1'] },
+        { user: { id: 'user-1' } } as any,
+      );
+
+      expect(mockMcpClient.planSprint).toHaveBeenCalledWith({
+        sprintGoal: 'Entregar pagos',
+        teamCapacityStoryPoints: 10,
+        candidateIssues: [{ id: 'issue-1', title: 'Issue 1', storyPoints: 5, priority: 'CRITICAL' }],
+      });
+      expect(result).toEqual({
+        sprintGoal: 'Entregar pagos',
+        allocatedStoryPoints: 5,
+        recommendedIssueIds: ['issue-1'],
+        riskAssessment: 'LOW',
+      });
+    });
+
+    it('fills safe defaults when the agent omits optional plan fields', async () => {
+      (mockMcpClient.planSprint as jest.Mock).mockResolvedValueOnce({});
+      const result = await resolver.aiPlanSprint(
+        { projectId: 'project-1', sprintGoal: 'Meta', teamCapacityStoryPoints: 10 },
+        { user: { id: 'user-1' } } as any,
+      );
+      expect(result).toEqual({ sprintGoal: 'Meta', allocatedStoryPoints: 0, recommendedIssueIds: [], riskAssessment: 'MEDIUM' });
+    });
+
+    it.each([
+      [1, 'LOW'], [2, 'MEDIUM'], [3, 'HIGH'], [4, 'CRITICAL'], [0, 'MEDIUM'], [99, 'MEDIUM'], ['high', 'HIGH'], [undefined, 'MEDIUM'],
+    ])('protoPriorityToName(%p) is %p', (value, expected) => {
+      expect(protoPriorityToName(value)).toBe(expected);
+    });
+  });
+
+  describe('aiImproveStory', () => {
+    const input = { projectId: 'project-1', title: 'Login con Google', description: 'OAuth2', type: 'STORY' };
+    const user = { user: { id: 'user-1' } } as any;
+
+    beforeEach(() => {
+      mockMcpClient.improveStory = jest.fn();
+    });
+
+    it('maps every field explicitly and passes the story type', async () => {
+      (mockMcpClient.improveStory as jest.Mock).mockResolvedValueOnce({
+        storyPoints: 5,
+        confidence: 1.4,
+        reasoning: 'OAuth estándar',
+        complexityFactors: ['OAuth2', 7],
+        acceptanceCriteriaGherkin: '  Feature: Login\n  Scenario: ok  ',
+        extra: 'ignored',
+      });
+
+      const result = await resolver.aiImproveStory(input, user);
+
+      expect(mockMcpClient.improveStory).toHaveBeenCalledWith({ title: 'Login con Google', description: 'OAuth2', type: 'STORY' });
+      expect(result).toEqual({
+        storyPoints: 5,
+        confidence: 1,
+        reasoning: 'OAuth estándar',
+        complexityFactors: ['OAuth2'],
+        acceptanceCriteriaGherkin: 'Feature: Login\n  Scenario: ok',
+      });
+    });
+
+    it('fails with a clear message when the agent omits acceptanceCriteriaGherkin (the reported bug)', async () => {
+      (mockMcpClient.improveStory as jest.Mock).mockResolvedValueOnce({
+        storyPoints: 3, confidence: 0.9, reasoning: 'r', complexityFactors: [],
+      });
+      await expect(resolver.aiImproveStory(input, user)).rejects.toThrow('propuesta incompleta');
+    });
+
+    it('fails with a clear message when story points are not an integer', async () => {
+      (mockMcpClient.improveStory as jest.Mock).mockResolvedValueOnce({
+        storyPoints: 'muchos', acceptanceCriteriaGherkin: 'Feature: X',
+      });
+      await expect(resolver.aiImproveStory(input, user)).rejects.toThrow('propuesta incompleta');
+    });
+
+    it('defaults optional fields and the story type', async () => {
+      (mockMcpClient.improveStory as jest.Mock).mockResolvedValueOnce({ storyPoints: 2, acceptanceCriteriaGherkin: 'Feature: X' });
+      const result = await resolver.aiImproveStory({ projectId: 'project-1', title: 'X' }, user);
+      expect(mockMcpClient.improveStory).toHaveBeenCalledWith({ title: 'X', description: undefined, type: 'STORY' });
+      expect(result).toEqual({ storyPoints: 2, confidence: 0, reasoning: '', complexityFactors: [], acceptanceCriteriaGherkin: 'Feature: X' });
     });
   });
 });

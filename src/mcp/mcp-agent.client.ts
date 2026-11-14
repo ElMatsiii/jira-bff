@@ -1,6 +1,43 @@
-import { Injectable, Optional } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  GatewayTimeoutException,
+  HttpException,
+  Injectable,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import axios from 'axios';
 import { ConfigService } from '../config/config.service';
+
+const MCP_TIMEOUT_MS = 15000;
+
+/**
+ * Turns an axios failure towards the MCP agent into an HttpException whose message reaches
+ * GraphQL in readable Spanish (instead of "Request failed with status code 422").
+ */
+export function toAgentError(operation: string, error: unknown): HttpException {
+  const err = error as {
+    code?: string;
+    message?: string;
+    response?: { status?: number; data?: { error?: unknown } | string };
+  } | null;
+  const status = err?.response?.status;
+  if (typeof status === 'number') {
+    const data = err?.response?.data;
+    const detail = typeof data === 'string' ? data : typeof data?.error === 'string' ? data.error : '';
+    const suffix = detail ? `: ${detail}` : '.';
+    if (status >= 400 && status < 500) {
+      return new BadRequestException(`El agente de IA rechazó la solicitud de ${operation} (HTTP ${status})${suffix}`);
+    }
+    return new BadGatewayException(`El agente de IA falló al procesar ${operation} (HTTP ${status})${suffix}`);
+  }
+  if (err?.code === 'ECONNABORTED' || err?.code === 'ETIMEDOUT') {
+    return new GatewayTimeoutException(`El agente de IA no respondió a tiempo en ${operation}.`);
+  }
+  const reason = err?.message ? ` (${err.message})` : '';
+  return new ServiceUnavailableException(`El agente de IA no está disponible para ${operation}${reason}.`);
+}
 
 export interface AiStory {
   title: string;
@@ -18,7 +55,8 @@ export interface AiDecompositionResult {
 }
 
 export interface AiSprintPlanResult {
-  sprintGoal: string;
+  /** The agent does not echo the goal; the resolver falls back to the requested one. */
+  sprintGoal?: string;
   allocatedStoryPoints: number;
   recommendedIssueIds: string[];
   riskAssessment: string;
@@ -64,22 +102,30 @@ export class McpAgentClient {
     return this.configService?.mcpAgentUrl || 'http://localhost:3000';
   }
 
+  private async post<T>(path: string, body: unknown, operation: string): Promise<T> {
+    try {
+      const response = await axios.post(`${this.baseUrl}${path}`, body, { timeout: MCP_TIMEOUT_MS });
+      return response.data;
+    } catch (error) {
+      throw toAgentError(operation, error);
+    }
+  }
+
   async decomposeEpic(input: {
     epicTitle: string;
     epicDescription?: string;
     projectKey?: string;
   }): Promise<AiDecompositionResult> {
-    const response = await axios.post(`${this.baseUrl}/agent/decompose-epic`, input, { timeout: 15000 });
-    return response.data;
+    return this.post('/agent/decompose-epic', input, 'desglose de épica');
   }
 
   async planSprint(input: {
     sprintGoal: string;
     teamCapacityStoryPoints: number;
-    candidateIssues?: { id: string; title: string; storyPoints: number; priority: number }[];
+    /** priority uses the agent's names: LOW | MEDIUM | HIGH | CRITICAL. */
+    candidateIssues?: { id: string; title: string; storyPoints: number; priority: string }[];
   }): Promise<AiSprintPlanResult> {
-    const response = await axios.post(`${this.baseUrl}/agent/plan-sprint`, input, { timeout: 15000 });
-    return response.data;
+    return this.post('/agent/plan-sprint', input, 'planificación de sprint');
   }
 
   async diagnoseMetrics(input: {
@@ -88,13 +134,11 @@ export class McpAgentClient {
     blockedIssuesCount?: number;
     alerts?: string[];
   }): Promise<AiDiagnosisResult> {
-    const response = await axios.post(`${this.baseUrl}/agent/diagnose-metrics`, input, { timeout: 15000 });
-    return response.data;
+    return this.post('/agent/diagnose-metrics', input, 'diagnóstico de métricas');
   }
 
   async improveStory(input: { title: string; description?: string; type: string }): Promise<AiStoryImprovementResult> {
-    const response = await axios.post(`${this.baseUrl}/agent/improve-story`, input, { timeout: 15000 });
-    return response.data;
+    return this.post('/agent/improve-story', input, 'mejora de historia');
   }
 
   async breakdownTask(input: {
@@ -102,7 +146,6 @@ export class McpAgentClient {
     description?: string;
     projectKey?: string;
   }): Promise<AiBreakdownTaskResult> {
-    const response = await axios.post(`${this.baseUrl}/agent/breakdown-task`, input, { timeout: 15000 });
-    return response.data;
+    return this.post('/agent/breakdown-task', input, 'segmentación de subtareas');
   }
 }
