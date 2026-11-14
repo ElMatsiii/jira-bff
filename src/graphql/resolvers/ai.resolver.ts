@@ -10,6 +10,14 @@ import { GqlAuthGuard } from '../../identity/gql-auth.guard';
 import { IdentityService } from '../../identity/identity.service';
 import { UserModel } from '../../identity/identity.models';
 
+const AI_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+
+/** Maps the agent's suggested priority to the GraphQL value, defaulting to MEDIUM when missing or unknown. */
+export function normalizeAiPriority(value: unknown): string {
+  const upper = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  return (AI_PRIORITIES as readonly string[]).includes(upper) ? upper : 'MEDIUM';
+}
+
 @Resolver()
 @UseGuards(GqlAuthGuard)
 export class AiResolver {
@@ -38,6 +46,7 @@ export class AiResolver {
         title: s.title,
         description: s.description || '',
         type: s.type || 'STORY',
+        priority: normalizeAiPriority(s.priority),
         estimatedStoryPoints: s.estimatedStoryPoints || 3,
         acceptanceCriteriaGherkin: s.acceptanceCriteriaGherkin || '',
       })),

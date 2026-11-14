@@ -6,6 +6,8 @@ export interface AiStory {
   title: string;
   description: string;
   type: string;
+  /** LOW | MEDIUM | HIGH | CRITICAL, as suggested by the agent (Gemini or fallback). */
+  priority?: string;
   estimatedStoryPoints: number;
   acceptanceCriteriaGherkin: string;
 }

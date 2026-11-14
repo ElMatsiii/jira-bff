@@ -11,6 +11,9 @@ export class AiStoryModel {
   @Field()
   type: string;
 
+  @Field({ description: 'Suggested priority: LOW, MEDIUM, HIGH or CRITICAL' })
+  priority: string;
+
   @Field(() => Int)
   estimatedStoryPoints: number;
 

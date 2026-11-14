@@ -1,4 +1,4 @@
-import { AiResolver } from '../src/graphql/resolvers/ai.resolver';
+import { AiResolver, normalizeAiPriority } from '../src/graphql/resolvers/ai.resolver';
 import { McpAgentClient } from '../src/mcp/mcp-agent.client';
 import { IssuesGrpcClient } from '../src/grpc/issues-grpc.client';
 import { SprintsGrpcClient } from '../src/grpc/sprints-grpc.client';
@@ -82,11 +82,40 @@ describe('AiResolver', () => {
     expect(result.epicTitle).toBe('Auth Epic');
     expect(result.stories.length).toBe(1);
     expect(result.stories[0].title).toBe('OAuth2 login');
+    expect(result.stories[0].priority).toBe('MEDIUM');
     expect(mockMcpClient.decomposeEpic).toHaveBeenCalledWith({
       epicTitle: 'Auth Epic',
       epicDescription: 'Desc',
       projectKey: undefined,
     });
+  });
+
+  it('passes the suggested priority of each decomposed story through to GraphQL', async () => {
+    (mockMcpClient.decomposeEpic as jest.Mock).mockResolvedValueOnce({
+      epicTitle: 'Pagos',
+      stories: [
+        { title: 'Pasarela', description: 'd', type: 'STORY', priority: 'CRITICAL', estimatedStoryPoints: 8, acceptanceCriteriaGherkin: 'g' },
+        { title: 'Formulario', description: 'd', type: 'STORY', priority: 'high', estimatedStoryPoints: 3, acceptanceCriteriaGherkin: 'g' },
+        { title: 'Reintentos', description: 'd', type: 'TASK', priority: ' LOW ', estimatedStoryPoints: 2, acceptanceCriteriaGherkin: 'g' },
+        { title: 'Sin prioridad', description: 'd', type: 'TASK', estimatedStoryPoints: 1, acceptanceCriteriaGherkin: 'g' },
+        { title: 'Prioridad inválida', description: 'd', type: 'BUG', priority: 'URGENT', estimatedStoryPoints: 1, acceptanceCriteriaGherkin: 'g' },
+      ],
+    });
+
+    const result = await resolver.aiDecomposeEpic(
+      { projectId: 'project-1', epicTitle: 'Pagos', projectKey: 'DEMO' },
+      { user: { id: 'user-1' } } as any,
+    );
+
+    expect(result.stories.map((s) => s.priority)).toEqual(['CRITICAL', 'HIGH', 'LOW', 'MEDIUM', 'MEDIUM']);
+  });
+
+  it('normalizeAiPriority accepts only known priorities', () => {
+    expect(normalizeAiPriority('critical')).toBe('CRITICAL');
+    expect(normalizeAiPriority('MEDIUM')).toBe('MEDIUM');
+    expect(normalizeAiPriority(3)).toBe('MEDIUM');
+    expect(normalizeAiPriority(undefined)).toBe('MEDIUM');
+    expect(normalizeAiPriority('')).toBe('MEDIUM');
   });
 
   it('should plan a sprint using AI with candidate issues', async () => {
