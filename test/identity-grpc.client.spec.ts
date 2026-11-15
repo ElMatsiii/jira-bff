@@ -69,7 +69,7 @@ describe('IdentityGrpcClient', () => {
     expect(stubs.workLogs.logWork.mock.calls[0][0]).toEqual({ userId: 'u1', projectId: 'p1', issueId: 'i1', hours: 2, note: 'n' });
 
     await expect(client.listWorkLogs('u1', 'p1')).resolves.toEqual({ entries: [], totalHours: 3 });
-    expect(stubs.workLogs.listWorkLogs.mock.calls[0][0]).toEqual({ requesterId: 'u1', projectId: 'p1', limit: 0 });
+    expect(stubs.workLogs.listWorkLogs.mock.calls[0][0]).toEqual({ requesterId: 'u1', projectId: 'p1', limit: 0, issueId: '' });
 
     await expect(client.sumSprintHours('p1', 's1')).resolves.toBe(0);
     expect(stubs.workLogs.sumSprintHours.mock.calls[0][0]).toEqual({ projectId: 'p1', sprintId: 's1' });

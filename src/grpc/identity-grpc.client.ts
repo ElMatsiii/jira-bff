@@ -121,7 +121,9 @@ export class IdentityGrpcClient implements OnModuleInit, OnModuleDestroy {
 
   /** limit 0 = MS1's default (100 newest entries); totalHours covers the whole project. */
   listWorkLogs(requesterId: string, projectId: string, limit = 0): Promise<ListWorkLogsResponse> {
-    return this.call<ListWorkLogsResponse>((s, done) => s.workLogs.listWorkLogs({ requesterId, projectId, limit }, done));
+    // issueId '' = the whole project (the per-issue filter is exposed in GraphQL in a later step).
+    return this.call<ListWorkLogsResponse>((s, done) =>
+      s.workLogs.listWorkLogs({ requesterId, projectId, limit, issueId: '' }, done));
   }
 
   async sumSprintHours(projectId: string, sprintId: string): Promise<number> {
