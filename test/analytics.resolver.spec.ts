@@ -5,7 +5,7 @@ import { IdentityService } from '../src/identity/identity.service';
 import { SprintsGrpcClient } from '../src/grpc/sprints-grpc.client';
 
 const sprint = (id: string, status: SprintStatus, endDate: number) =>
-  ({ id, projectId: 'project-1', name: id, goal: '', startDate: 0, endDate, status, totalStoryPoints: 0, completedStoryPoints: 0, createdAt: 0, updatedAt: 0 });
+  ({ id, projectId: 'project-1', name: id, goal: '', startDate: 0, endDate, status, totalStoryPoints: 0, completedStoryPoints: 0, createdAt: 0, updatedAt: 0, capacityStoryPoints: 0 });
 
 describe('AnalyticsResolver', () => {
   let resolver: AnalyticsResolver;

@@ -57,6 +57,8 @@ export class IssuesResolver {
       assigneeId: input.assigneeId || '',
       reporterId: request.user.id,
       acceptanceCriteria: input.acceptanceCriteria || '',
+      // Without parent epic until GraphQL exposes parentId (step 16).
+      parentId: '',
     };
     const issue = await this.issuesClient.createIssue(req);
     return this.mapToModel(issue);

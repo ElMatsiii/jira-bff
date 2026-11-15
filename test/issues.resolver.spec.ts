@@ -64,7 +64,7 @@ describe('IssuesResolver', () => {
     };
     const result = await resolver.createIssue(input, { user: { id: 'user-1' } } as any);
     expect(result.id).toBe('issue-1');
-    expect(mockClient.createIssue).toHaveBeenCalled();
+    expect(mockClient.createIssue).toHaveBeenCalledWith(expect.objectContaining({ title: 'New Issue', parentId: '' }));
   });
 
   it('should update an issue status', async () => {

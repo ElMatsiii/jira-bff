@@ -49,6 +49,8 @@ export class SprintsResolver {
       goal: input.goal || '',
       startDate: input.startDate ? new Date(input.startDate).getTime() : Date.now(),
       endDate: input.endDate ? new Date(input.endDate).getTime() : Date.now() + 14 * 86400000,
+      // 0 = capacity not defined, until the capacity step exposes it in GraphQL.
+      capacityStoryPoints: 0,
     };
     const sprint = await this.sprintsClient.createSprint(req);
     return this.mapToModel(sprint);
