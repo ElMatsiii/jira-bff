@@ -130,7 +130,9 @@ export class McpAgentClient {
 
   async diagnoseMetrics(input: {
     sprintId: string;
-    burndownData?: unknown[];
+    sprintName?: string;
+    /** Points accepted by the agent's BurndownPointSchema: day, optional date, ideal/actual remaining. */
+    burndownData?: { day: number; date?: string; idealRemaining: number; actualRemaining: number }[];
     blockedIssuesCount?: number;
     alerts?: string[];
   }): Promise<AiDiagnosisResult> {

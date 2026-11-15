@@ -4,6 +4,7 @@ import { Request } from 'express';
 import { McpAgentClient } from '../../mcp/mcp-agent.client';
 import { IssuesGrpcClient } from '../../grpc/issues-grpc.client';
 import { SprintsGrpcClient } from '../../grpc/sprints-grpc.client';
+import { KafkaAnalyticsClient } from '../../kafka/kafka-analytics.client';
 import { AiDecompositionModel, AiSprintPlanModel, AiDiagnosisModel, AiStoryImprovementModel, AiBreakdownTaskModel } from '../models/ai.model';
 import { DecomposeEpicInput, PlanSprintInput, DiagnoseMetricsInput, ImproveStoryInput, BreakdownTaskInput } from '../dto/ai.inputs';
 import { GqlAuthGuard } from '../../identity/gql-auth.guard';
@@ -32,6 +33,7 @@ export class AiResolver {
     private readonly issuesClient: IssuesGrpcClient,
     private readonly sprintsClient: SprintsGrpcClient,
     private readonly identity: IdentityService,
+    private readonly analyticsClient: KafkaAnalyticsClient,
   ) {}
 
   @Mutation(() => AiDecompositionModel, { name: 'aiDecomposeEpic' })
@@ -116,10 +118,25 @@ export class AiResolver {
     const timeAlerts = loggedHours > 0
       ? [`El equipo registró ${loggedHours.toFixed(2)} horas de trabajo en este sprint. Esta cifra describe el tiempo cargado, no mide por sí sola productividad.`]
       : ['No hay horas de trabajo registradas todavía; no se puede evaluar el uso del tiempo con datos reales.'];
+
+    // Real burndown from MS3 (Kafka request-reply), so the agent diagnoses with data.
+    const analytics = await this.analyticsClient.getBurndownAnalytics(input.sprintId, input.projectId);
+    const burndownData = analytics.burndownPoints.map((point) => ({
+      day: point.day,
+      ...(point.date ? { date: point.date } : {}),
+      idealRemaining: point.idealRemaining,
+      actualRemaining: point.actualRemaining,
+    }));
+    const dataAlerts = burndownData.length
+      ? []
+      : ['No hay datos de burndown disponibles desde el servicio de analítica; el diagnóstico se basa solo en bloqueos y horas registradas.'];
+
     const res = await this.mcpClient.diagnoseMetrics({
       sprintId: input.sprintId,
+      sprintName: sprint.name,
+      burndownData,
       blockedIssuesCount: input.blockedIssuesCount,
-      alerts: timeAlerts,
+      alerts: [...dataAlerts, ...timeAlerts],
     });
     const summary = res.summary || res.diagnosis;
     const recommendations = res.recommendations || res.actionableRecommendations;

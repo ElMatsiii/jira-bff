@@ -1,12 +1,27 @@
 import { Resolver, Query, Args, Float, Context } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { Request } from 'express';
+import { Sprint, SprintStatus } from 'jira-contracts/gen/ts';
 import { KafkaAnalyticsClient } from '../../kafka/kafka-analytics.client';
 import { AnalyticsModel } from '../models/analytics.model';
 import { GqlAuthGuard } from '../../identity/gql-auth.guard';
 import { IdentityService } from '../../identity/identity.service';
 import { UserModel } from '../../identity/identity.models';
 import { SprintsGrpcClient } from '../../grpc/sprints-grpc.client';
+
+/**
+ * Sprint whose analytics represent the project's current pace: the active one, otherwise the
+ * most recently finished one, otherwise the latest planned one.
+ */
+export function pickReferenceSprint(sprints: Sprint[]): Sprint | null {
+  const byEndDesc = [...sprints].sort((a, b) => (b.endDate || 0) - (a.endDate || 0));
+  return (
+    sprints.find((s) => s.status === SprintStatus.SPRINT_STATUS_ACTIVE) ||
+    byEndDesc.find((s) => s.status === SprintStatus.SPRINT_STATUS_COMPLETED) ||
+    byEndDesc.find((s) => s.status !== SprintStatus.SPRINT_STATUS_CANCELLED) ||
+    null
+  );
+}
 
 @Resolver(() => AnalyticsModel)
 @UseGuards(GqlAuthGuard)
@@ -24,7 +39,7 @@ export class AnalyticsResolver {
   ): Promise<AnalyticsModel> {
     const sprint = await this.sprintsClient.getSprint(sprintId);
     await this.identity.assertProjectAccess(request.user.id, sprint.projectId);
-    const data = await this.analyticsClient.getBurndownAnalytics(sprintId);
+    const data = await this.analyticsClient.getBurndownAnalytics(sprintId, sprint.projectId);
     return {
       sprintId: data.sprintId,
       velocity: data.velocity,
@@ -35,12 +50,19 @@ export class AnalyticsResolver {
     };
   }
 
-  @Query(() => Float, { name: 'getTeamVelocity' })
-  async getTeamVelocity(
-    @Args('teamId') teamId: string,
+  /**
+   * Rolling velocity of a project, as computed by MS3 (which tracks velocity per project).
+   * Replaces getTeamVelocity(teamId), which sent a workspace id where MS3 expects a sprint id.
+   * Returns null when the project has no sprints or MS3 is unavailable.
+   */
+  @Query(() => Float, { name: 'getProjectVelocity', nullable: true })
+  async getProjectVelocity(
+    @Args('projectId') projectId: string,
     @Context('req') request: Request & { user: UserModel },
-  ): Promise<number> {
-    await this.identity.assertWorkspaceAccess(request.user.id, teamId);
-    return this.analyticsClient.getTeamVelocity(teamId);
+  ): Promise<number | null> {
+    await this.identity.assertProjectAccess(request.user.id, projectId);
+    const reference = pickReferenceSprint(await this.sprintsClient.listSprints(projectId));
+    if (!reference) return null;
+    return this.analyticsClient.getVelocity(reference.id, projectId);
   }
 }

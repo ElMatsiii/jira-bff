@@ -10,6 +10,7 @@ describe('AiResolver', () => {
   let mockIssuesClient: jest.Mocked<Partial<IssuesGrpcClient>>;
   let mockSprintsClient: jest.Mocked<Partial<SprintsGrpcClient>>;
   let mockIdentity: { assertProjectAccess: jest.Mock; sprintLoggedHours: jest.Mock };
+  let mockAnalyticsClient: { getBurndownAnalytics: jest.Mock };
 
   beforeEach(() => {
     mockMcpClient = {
@@ -63,7 +64,13 @@ describe('AiResolver', () => {
       } as any),
     };
 
-    mockSprintsClient = { getSprint: jest.fn().mockResolvedValue({ projectId: 'project-1' }) };
+    mockSprintsClient = { getSprint: jest.fn().mockResolvedValue({ projectId: 'project-1', name: 'Sprint 1' }) };
+    mockAnalyticsClient = {
+      getBurndownAnalytics: jest.fn().mockResolvedValue({
+        sprintId: 'sprint-1', velocity: 0, idealBurndown: [], actualBurndown: [], blockedCount: 0,
+        healthStatus: 'UNAVAILABLE', burndownPoints: [],
+      }),
+    };
     mockIdentity = {
       assertProjectAccess: jest.fn().mockResolvedValue(undefined),
       sprintLoggedHours: jest.fn().mockResolvedValue(0),
@@ -73,6 +80,7 @@ describe('AiResolver', () => {
       mockIssuesClient as any,
       mockSprintsClient as any,
       mockIdentity as unknown as IdentityService,
+      mockAnalyticsClient as any,
     );
   });
 
@@ -139,8 +147,39 @@ describe('AiResolver', () => {
     expect(result.healthStatus).toBe('HEALTHY');
     expect(mockMcpClient.diagnoseMetrics).toHaveBeenCalledWith({
       sprintId: 'sprint-1',
+      sprintName: 'Sprint 1',
+      burndownData: [],
       blockedIssuesCount: 0,
-      alerts: ['No hay horas de trabajo registradas todavía; no se puede evaluar el uso del tiempo con datos reales.'],
+      alerts: [
+        'No hay datos de burndown disponibles desde el servicio de analítica; el diagnóstico se basa solo en bloqueos y horas registradas.',
+        'No hay horas de trabajo registradas todavía; no se puede evaluar el uso del tiempo con datos reales.',
+      ],
+    });
+  });
+
+  it('sends the real MS3 burndown to the agent when analytics are available', async () => {
+    (mockAnalyticsClient.getBurndownAnalytics as jest.Mock).mockResolvedValueOnce({
+      sprintId: 'sprint-1', velocity: 18, idealBurndown: [20, 10], actualBurndown: [20, 15], blockedCount: 0,
+      healthStatus: 'AT_RISK',
+      burndownPoints: [
+        { day: 0, date: '2026-11-16', idealRemaining: 20, actualRemaining: 20 },
+        { day: 1, date: '', idealRemaining: 10, actualRemaining: 15 },
+      ],
+    });
+    mockIdentity.sprintLoggedHours.mockResolvedValueOnce(6.5);
+
+    await resolver.aiDiagnoseMetrics({ projectId: 'project-1', sprintId: 'sprint-1', blockedIssuesCount: 2 }, { user: { id: 'user-1' } } as any);
+
+    expect(mockAnalyticsClient.getBurndownAnalytics).toHaveBeenCalledWith('sprint-1', 'project-1');
+    expect(mockMcpClient.diagnoseMetrics).toHaveBeenCalledWith({
+      sprintId: 'sprint-1',
+      sprintName: 'Sprint 1',
+      burndownData: [
+        { day: 0, date: '2026-11-16', idealRemaining: 20, actualRemaining: 20 },
+        { day: 1, idealRemaining: 10, actualRemaining: 15 },
+      ],
+      blockedIssuesCount: 2,
+      alerts: [expect.stringContaining('registró 6.50 horas')],
     });
   });
 
