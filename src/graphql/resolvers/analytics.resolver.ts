@@ -43,6 +43,7 @@ export class AnalyticsResolver {
     return {
       sprintId: data.sprintId,
       velocity: data.velocity,
+      velocitySampleSize: data.velocitySampleSize,
       idealBurndown: data.idealBurndown,
       actualBurndown: data.actualBurndown,
       blockedCount: data.blockedCount,

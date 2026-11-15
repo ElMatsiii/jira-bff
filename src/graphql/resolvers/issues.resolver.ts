@@ -9,6 +9,7 @@ import { GqlAuthGuard } from '../../identity/gql-auth.guard';
 import { IdentityService } from '../../identity/identity.service';
 import { UserModel } from '../../identity/identity.models';
 import { SprintsGrpcClient } from '../../grpc/sprints-grpc.client';
+import { translateParentEpicError } from '../../identity/ms1-errors';
 
 @Resolver(() => IssueModel)
 @UseGuards(GqlAuthGuard)
@@ -57,10 +58,11 @@ export class IssuesResolver {
       assigneeId: input.assigneeId || '',
       reporterId: request.user.id,
       acceptanceCriteria: input.acceptanceCriteria || '',
-      // Without parent epic until GraphQL exposes parentId (step 16).
-      parentId: '',
+      parentId: input.parentId || '',
     };
-    const issue = await this.issuesClient.createIssue(req);
+    const issue = await this.issuesClient.createIssue(req).catch((err) => {
+      throw translateParentEpicError(err);
+    });
     return this.mapToModel(issue);
   }
 
@@ -103,6 +105,7 @@ export class IssuesResolver {
       type: issue.type || 1,
       storyPoints: issue.storyPoints || 0,
       sprintId: issue.sprintId || '',
+      parentId: issue.parentId || undefined,
       assigneeId: issue.assigneeId || '',
       reporterId: issue.reporterId || '',
       acceptanceCriteria: issue.acceptanceCriteria || '',

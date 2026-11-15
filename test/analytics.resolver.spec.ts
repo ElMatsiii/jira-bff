@@ -17,8 +17,9 @@ describe('AnalyticsResolver', () => {
   const sampleAnalytics = {
     sprintId: 'sprint-1',
     velocity: 35,
+    velocitySampleSize: 3,
     idealBurndown: [40, 30, 20, 10, 0],
-    actualBurndown: [40, 38, 25, 12, 0],
+    actualBurndown: [40, 38, 25, null, null],
     blockedCount: 0,
     healthStatus: 'HEALTHY' as const,
     burndownPoints: [{ day: 0, date: '2026-11-16', idealRemaining: 40, actualRemaining: 40 }],
@@ -42,10 +43,18 @@ describe('AnalyticsResolver', () => {
 
     expect(mockIdentity.assertProjectAccess).toHaveBeenCalledWith('user-1', 'project-1');
     expect(mockClient.getBurndownAnalytics).toHaveBeenCalledWith('sprint-1', 'project-1');
+    // The ideal line covers the whole sprint; the real one is null for days that have not happened.
     expect(result).toEqual({
-      sprintId: 'sprint-1', velocity: 35, idealBurndown: [40, 30, 20, 10, 0], actualBurndown: [40, 38, 25, 12, 0],
-      blockedCount: 0, healthStatus: 'HEALTHY',
+      sprintId: 'sprint-1', velocity: 35, velocitySampleSize: 3, idealBurndown: [40, 30, 20, 10, 0],
+      actualBurndown: [40, 38, 25, null, null], blockedCount: 0, healthStatus: 'HEALTHY',
     });
+  });
+
+  it.each(['NOT_STARTED', 'NO_SCOPE'])('passes MS3 classification %s through', async (healthStatus) => {
+    (mockClient.getBurndownAnalytics as jest.Mock).mockResolvedValueOnce({ ...sampleAnalytics, healthStatus, velocitySampleSize: 0 });
+    const result = await resolver.getBurndownAnalytics('sprint-1', user);
+    expect(result.healthStatus).toBe(healthStatus);
+    expect(result.velocitySampleSize).toBe(0);
   });
 
   it('passes UNAVAILABLE through when MS3 did not answer', async () => {

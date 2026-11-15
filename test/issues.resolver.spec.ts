@@ -65,6 +65,26 @@ describe('IssuesResolver', () => {
     const result = await resolver.createIssue(input, { user: { id: 'user-1' } } as any);
     expect(result.id).toBe('issue-1');
     expect(mockClient.createIssue).toHaveBeenCalledWith(expect.objectContaining({ title: 'New Issue', parentId: '' }));
+    expect(result.parentId).toBeUndefined();
+  });
+
+  it('creates a story under an epic and exposes its parentId', async () => {
+    (mockClient.createIssue as jest.Mock).mockResolvedValueOnce({ ...sampleIssue, id: 'story-1', parentId: 'epic-1' });
+
+    const result = await resolver.createIssue({ projectId: 'proj-1', title: 'Historia', parentId: 'epic-1' }, { user: { id: 'user-1' } } as any);
+
+    expect(mockClient.createIssue).toHaveBeenCalledWith(expect.objectContaining({ parentId: 'epic-1' }));
+    expect(result.parentId).toBe('epic-1');
+  });
+
+  it('explains in Spanish why MS1 rejected the parent epic, and passes other errors through', async () => {
+    (mockClient.createIssue as jest.Mock).mockRejectedValueOnce({ code: 5, details: 'parent epic not found: parent epic not found' });
+    await expect(resolver.createIssue({ projectId: 'proj-1', title: 'H', parentId: 'epic-x' }, { user: { id: 'user-1' } } as any))
+      .rejects.toThrow('La épica seleccionada no existe.');
+
+    const other = { code: 13, details: 'boom' };
+    (mockClient.createIssue as jest.Mock).mockRejectedValueOnce(other);
+    await expect(resolver.createIssue({ projectId: 'proj-1', title: 'H' }, { user: { id: 'user-1' } } as any)).rejects.toBe(other);
   });
 
   it('should update an issue status', async () => {

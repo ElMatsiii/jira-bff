@@ -45,6 +45,9 @@ export class IssueModel {
   @Field({ nullable: true })
   sprintId?: string;
 
+  @Field({ nullable: true, description: 'Parent epic (an EPIC of the same project); null when the issue has none.' })
+  parentId?: string;
+
   @Field({ nullable: true })
   assigneeId?: string;
 

@@ -2,7 +2,14 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Optional } from '@ne
 import { Kafka, Producer, Consumer } from 'kafkajs';
 import { randomUUID } from 'crypto';
 import { ConfigService } from '../config/config.service';
-import { classifyHealthScore, HEALTH_STATUS_UNAVAILABLE, SprintHealthStatus } from './analytics-health';
+
+/** Classifications MS3 sends in analytics.reply (healthStatus enum of the contract). */
+export const MS3_HEALTH_STATUSES = ['HEALTHY', 'AT_RISK', 'CRITICAL', 'NOT_STARTED', 'NO_SCOPE'] as const;
+
+/** MS3's classification, or UNAVAILABLE when MS3 did not answer, failed or sent none. */
+export type SprintHealthStatus = (typeof MS3_HEALTH_STATUSES)[number] | 'UNAVAILABLE';
+
+export const HEALTH_STATUS_UNAVAILABLE: SprintHealthStatus = 'UNAVAILABLE';
 
 export const ANALYTICS_QUERY_TOPIC = 'analytics.query';
 export const ANALYTICS_REPLY_TOPIC = 'analytics.reply';
@@ -17,15 +24,20 @@ export interface BurndownPoint {
   day: number;
   date: string;
   idealRemaining: number;
-  actualRemaining: number;
+  /** null for days that have not happened yet (the real line ends today). */
+  actualRemaining: number | null;
 }
 
 /** BFF-local analytics model built from MS3's analytics.reply. */
 export interface AnalyticsResult {
   sprintId: string;
   velocity: number;
+  /** Closed sprints averaged in velocity (0 = none yet); null when MS3 did not say. */
+  velocitySampleSize: number | null;
+  /** One value per sprint day. */
   idealBurndown: number[];
-  actualBurndown: number[];
+  /** Same length as idealBurndown; null for future days. */
+  actualBurndown: (number | null)[];
   /** MS1 has no BLOCKED status and MS3 does not report blocked issues, so this is 0 for now. */
   blockedCount: number;
   healthStatus: SprintHealthStatus;
@@ -40,8 +52,10 @@ interface AnalyticsReply {
   status?: 'SUCCESS' | 'FAILED' | string;
   errorMessage?: string | null;
   velocity?: number;
+  velocitySampleSize?: number;
   healthScore?: number;
-  burndownData?: { date?: string; dayIndex?: number; idealRemaining?: number; actualRemaining?: number }[];
+  healthStatus?: string;
+  burndownData?: { date?: string; dayIndex?: number; idealRemaining?: number; actualRemaining?: number | null }[];
 }
 
 type PendingRequest = { resolve: (reply: AnalyticsReply | null) => void; timer: NodeJS.Timeout };
@@ -179,6 +193,7 @@ export function unavailableAnalytics(sprintId: string): AnalyticsResult {
   return {
     sprintId,
     velocity: 0,
+    velocitySampleSize: null,
     idealBurndown: [],
     actualBurndown: [],
     blockedCount: 0,
@@ -195,23 +210,38 @@ export function toAnalyticsResult(sprintId: string, reply: AnalyticsReply | null
     return unavailableAnalytics(sprintId);
   }
 
+  // A day without ideal value is unusable; a day without actual value has not happened yet and is
+  // kept (with null) so the ideal line covers the whole sprint.
   const points: BurndownPoint[] = (Array.isArray(reply.burndownData) ? reply.burndownData : [])
-    .filter((p) => typeof p?.idealRemaining === 'number' && typeof p?.actualRemaining === 'number')
+    .filter((p) => isFiniteNumber(p?.idealRemaining))
     .map((p, index) => ({
       day: typeof p.dayIndex === 'number' ? p.dayIndex : index,
       date: typeof p.date === 'string' ? p.date : '',
       idealRemaining: p.idealRemaining as number,
-      actualRemaining: p.actualRemaining as number,
+      actualRemaining: isFiniteNumber(p.actualRemaining) ? p.actualRemaining : null,
     }))
     .sort((a, b) => a.day - b.day);
 
   return {
     sprintId,
-    velocity: typeof reply.velocity === 'number' && Number.isFinite(reply.velocity) ? reply.velocity : 0,
+    velocity: isFiniteNumber(reply.velocity) ? reply.velocity : 0,
+    velocitySampleSize:
+      Number.isInteger(reply.velocitySampleSize) && (reply.velocitySampleSize as number) >= 0
+        ? (reply.velocitySampleSize as number)
+        : null,
     idealBurndown: points.map((p) => Math.round(p.idealRemaining)),
-    actualBurndown: points.map((p) => Math.round(p.actualRemaining)),
+    actualBurndown: points.map((p) => (p.actualRemaining === null ? null : Math.round(p.actualRemaining))),
     blockedCount: 0,
-    healthStatus: classifyHealthScore(reply.healthScore),
+    healthStatus: toHealthStatus(reply.healthStatus),
     burndownPoints: points,
   };
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** MS3 classifies the sprint; anything else (missing or unknown) is UNAVAILABLE, never guessed here. */
+export function toHealthStatus(value: unknown): SprintHealthStatus {
+  return (MS3_HEALTH_STATUSES as readonly unknown[]).includes(value) ? (value as SprintHealthStatus) : HEALTH_STATUS_UNAVAILABLE;
 }

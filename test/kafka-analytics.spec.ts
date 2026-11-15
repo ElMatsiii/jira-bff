@@ -52,11 +52,14 @@ const ms3Reply = (correlationId: string, overrides: Record<string, unknown> = {}
   completedPoints: 8,
   remainingPoints: 12,
   velocity: 18.5,
+  velocitySampleSize: 2,
   healthScore: 62.4,
+  healthStatus: 'AT_RISK',
   burndownData: [
     { date: '2026-11-17', dayIndex: 1, idealRemaining: 17.14, actualRemaining: 20, completedOnDay: 0 },
     { date: '2026-11-16', dayIndex: 0, idealRemaining: 20, actualRemaining: 20, completedOnDay: 0 },
     { date: '2026-11-18', dayIndex: 2, idealRemaining: 14.29, actualRemaining: 12.5, completedOnDay: 8 },
+    { date: '2026-11-19', dayIndex: 3, idealRemaining: 11.43, actualRemaining: null },
   ],
   diagnostics: [],
   recommendations: [],
@@ -102,14 +105,16 @@ describe('KafkaAnalyticsClient request-reply with MS3', () => {
     await expect(pending).resolves.toEqual({
       sprintId: SPRINT_ID,
       velocity: 18.5,
-      idealBurndown: [20, 17, 14],
-      actualBurndown: [20, 20, 13],
+      velocitySampleSize: 2,
+      idealBurndown: [20, 17, 14, 11],
+      actualBurndown: [20, 20, 13, null],
       blockedCount: 0,
       healthStatus: 'AT_RISK',
       burndownPoints: [
         { day: 0, date: '2026-11-16', idealRemaining: 20, actualRemaining: 20 },
         { day: 1, date: '2026-11-17', idealRemaining: 17.14, actualRemaining: 20 },
         { day: 2, date: '2026-11-18', idealRemaining: 14.29, actualRemaining: 12.5 },
+        { day: 3, date: '2026-11-19', idealRemaining: 11.43, actualRemaining: null },
       ],
     });
   });
@@ -227,29 +232,46 @@ describe('KafkaAnalyticsClient request-reply with MS3', () => {
 });
 
 describe('toAnalyticsResult (MS3 reply → BFF model)', () => {
-  it('drops incomplete points, defaults missing fields and keeps order by day', () => {
+  it('keeps days without actual value as null, drops days without ideal value and keeps order by day', () => {
     const result = toAnalyticsResult(SPRINT_ID, {
       status: 'SUCCESS',
-      healthScore: 80,
+      healthStatus: 'HEALTHY',
       burndownData: [
-        { dayIndex: 2, idealRemaining: 4, actualRemaining: 6 },
-        { dayIndex: 1, idealRemaining: 8 },
         { idealRemaining: 12, actualRemaining: 12 },
+        { dayIndex: 2, idealRemaining: 4, actualRemaining: null },
+        { dayIndex: 1, actualRemaining: 9 },
+        { dayIndex: 3, idealRemaining: 0 },
       ],
     });
 
     expect(result).toMatchObject({
       velocity: 0,
+      velocitySampleSize: null,
       healthStatus: 'HEALTHY',
-      idealBurndown: [12, 4],
-      actualBurndown: [12, 6],
+      idealBurndown: [12, 4, 0],
+      actualBurndown: [12, null, null],
     });
-    expect(result.burndownPoints.map((p) => p.date)).toEqual(['', '']);
+    expect(result.burndownPoints.map((p) => p.date)).toEqual(['', '', '']);
   });
 
-  it('is UNAVAILABLE without a reply or without a usable health score', () => {
+  it.each(['HEALTHY', 'AT_RISK', 'CRITICAL', 'NOT_STARTED', 'NO_SCOPE'])('uses the %s classification sent by MS3', (status) => {
+    expect(toAnalyticsResult(SPRINT_ID, { status: 'SUCCESS', healthStatus: status, healthScore: 100 }).healthStatus).toBe(status);
+  });
+
+  it('never classifies the score itself: without a valid healthStatus it is UNAVAILABLE', () => {
+    expect(toAnalyticsResult(SPRINT_ID, { status: 'SUCCESS', healthScore: 90 }).healthStatus).toBe('UNAVAILABLE');
+    expect(toAnalyticsResult(SPRINT_ID, { status: 'SUCCESS', healthStatus: 'GREAT' }).healthStatus).toBe('UNAVAILABLE');
+  });
+
+  it('keeps velocitySampleSize 0 (no closed sprints) and ignores invalid values', () => {
+    expect(toAnalyticsResult(SPRINT_ID, { status: 'SUCCESS', velocitySampleSize: 0 }).velocitySampleSize).toBe(0);
+    expect(toAnalyticsResult(SPRINT_ID, { status: 'SUCCESS', velocitySampleSize: -1 }).velocitySampleSize).toBeNull();
+    expect(toAnalyticsResult(SPRINT_ID, { status: 'SUCCESS', velocitySampleSize: 1.5 }).velocitySampleSize).toBeNull();
+  });
+
+  it('is UNAVAILABLE without a reply', () => {
     expect(toAnalyticsResult(SPRINT_ID, null)).toEqual(unavailableAnalytics(SPRINT_ID));
-    expect(toAnalyticsResult(SPRINT_ID, { status: 'SUCCESS' }).healthStatus).toBe('UNAVAILABLE');
+    expect(unavailableAnalytics(SPRINT_ID).velocitySampleSize).toBeNull();
     expect(toAnalyticsResult(SPRINT_ID, { status: 'SUCCESS', burndownData: 'x' as any }).idealBurndown).toEqual([]);
   });
 });

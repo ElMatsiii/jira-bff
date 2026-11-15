@@ -10,7 +10,7 @@ import { IssuesResolver } from './graphql/resolvers/issues.resolver';
 import { SprintsResolver } from './graphql/resolvers/sprints.resolver';
 import { AnalyticsResolver } from './graphql/resolvers/analytics.resolver';
 import { AiResolver } from './graphql/resolvers/ai.resolver';
-import { IdentityDatabase } from './identity/database.service';
+import { IdentityGrpcClient } from './grpc/identity-grpc.client';
 import { IdentityResolver } from './identity/identity.resolver';
 import { IdentityService } from './identity/identity.service';
 import { GqlAuthGuard } from './identity/gql-auth.guard';
@@ -35,7 +35,7 @@ import { GqlAuthGuard } from './identity/gql-auth.guard';
     SprintsResolver,
     AnalyticsResolver,
     AiResolver,
-    IdentityDatabase,
+    IdentityGrpcClient,
     IdentityService,
     GqlAuthGuard,
     IdentityResolver,
