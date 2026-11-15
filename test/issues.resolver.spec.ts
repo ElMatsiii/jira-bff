@@ -2,6 +2,7 @@ import { IssuesResolver } from '../src/graphql/resolvers/issues.resolver';
 import { IssuesGrpcClient } from '../src/grpc/issues-grpc.client';
 import { IssueStatusEnum } from '../src/graphql/models/issue.model';
 import { IdentityService } from '../src/identity/identity.service';
+import { SprintsGrpcClient } from '../src/grpc/sprints-grpc.client';
 
 describe('IssuesResolver', () => {
   let resolver: IssuesResolver;
@@ -35,6 +36,8 @@ describe('IssuesResolver', () => {
     resolver = new IssuesResolver(
       mockClient as any,
       { assertProjectAccess: jest.fn().mockResolvedValue(undefined) } as unknown as IdentityService,
+      // The resolver now also needs MS2 (sprint lookup when assigning issues to a sprint).
+      { getSprint: jest.fn().mockResolvedValue({ id: 'sprint-1', projectId: 'proj-1' }) } as unknown as SprintsGrpcClient,
     );
   });
 
