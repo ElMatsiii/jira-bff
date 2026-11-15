@@ -6,6 +6,7 @@ import {
   IdentityServiceClient,
   ListWorkLogsResponse,
   Project,
+  ProjectMember,
   ProjectServiceClient,
   User,
   WorkLog,
@@ -17,7 +18,10 @@ import {
 /** The three MS1 stubs this client talks to. Tests inject fakes with the same callback API. */
 export interface Ms1IdentityStubs {
   identity: Pick<IdentityServiceClient, 'registerUser' | 'authenticateUser' | 'getUser' | 'listUserWorkspaces' | 'addWorkspaceMember'> & { close?: () => void };
-  projects: Pick<ProjectServiceClient, 'createProject' | 'listProjects' | 'checkProjectAccess'> & { close?: () => void };
+  projects: Pick<
+    ProjectServiceClient,
+    'createProject' | 'listProjects' | 'checkProjectAccess' | 'addProjectMember' | 'listProjectMembers' | 'removeProjectMember'
+  > & { close?: () => void };
   workLogs: Pick<WorkLogServiceClient, 'logWork' | 'listWorkLogs' | 'sumSprintHours'> & { close?: () => void };
 }
 
@@ -119,11 +123,27 @@ export class IdentityGrpcClient implements OnModuleInit, OnModuleDestroy {
     return res.workLog;
   }
 
-  /** limit 0 = MS1's default (100 newest entries); totalHours covers the whole project. */
-  listWorkLogs(requesterId: string, projectId: string, limit = 0): Promise<ListWorkLogsResponse> {
-    // issueId '' = the whole project (the per-issue filter is exposed in GraphQL in a later step).
+  async addProjectMember(requesterId: string, projectId: string, memberEmail: string): Promise<ProjectMember> {
+    const res = await this.call<any>((s, done) => s.projects.addProjectMember({ requesterId, projectId, memberEmail }, done));
+    return res.member;
+  }
+
+  async listProjectMembers(requesterId: string, projectId: string): Promise<ProjectMember[]> {
+    const res = await this.call<any>((s, done) => s.projects.listProjectMembers({ requesterId, projectId }, done));
+    return res.members || [];
+  }
+
+  async removeProjectMember(requesterId: string, projectId: string, userId: string): Promise<void> {
+    await this.call<any>((s, done) => s.projects.removeProjectMember({ requesterId, projectId, userId }, done));
+  }
+
+  /**
+   * limit 0 = MS1's default (100 newest entries). Without issueId, entries and totalHours cover the
+   * whole project; with it, only that issue.
+   */
+  listWorkLogs(requesterId: string, projectId: string, limit = 0, issueId = ''): Promise<ListWorkLogsResponse> {
     return this.call<ListWorkLogsResponse>((s, done) =>
-      s.workLogs.listWorkLogs({ requesterId, projectId, limit, issueId: '' }, done));
+      s.workLogs.listWorkLogs({ requesterId, projectId, limit, issueId }, done));
   }
 
   async sumSprintHours(projectId: string, sprintId: string): Promise<number> {

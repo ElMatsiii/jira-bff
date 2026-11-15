@@ -18,6 +18,9 @@ function fakeStubs() {
       createProject: unary({ project: { id: 'p1' } }),
       listProjects: unary({ projects: [{ id: 'p1' }] }),
       checkProjectAccess: unary({ allowed: true, role: 1, workspaceId: 'w1' }),
+      addProjectMember: unary({ member: { user: { id: 'u2' }, role: 3, invited: true } }),
+      listProjectMembers: unary({}),
+      removeProjectMember: unary({}),
       close: jest.fn(),
     },
     workLogs: {
@@ -70,6 +73,18 @@ describe('IdentityGrpcClient', () => {
 
     await expect(client.listWorkLogs('u1', 'p1')).resolves.toEqual({ entries: [], totalHours: 3 });
     expect(stubs.workLogs.listWorkLogs.mock.calls[0][0]).toEqual({ requesterId: 'u1', projectId: 'p1', limit: 0, issueId: '' });
+
+    await expect(client.listWorkLogs('u1', 'p1', 0, 'i1')).resolves.toEqual({ entries: [], totalHours: 3 });
+    expect(stubs.workLogs.listWorkLogs.mock.calls[1][0]).toEqual({ requesterId: 'u1', projectId: 'p1', limit: 0, issueId: 'i1' });
+
+    await expect(client.addProjectMember('u1', 'p1', 'b@x.com')).resolves.toEqual({ user: { id: 'u2' }, role: 3, invited: true });
+    expect(stubs.projects.addProjectMember.mock.calls[0][0]).toEqual({ requesterId: 'u1', projectId: 'p1', memberEmail: 'b@x.com' });
+
+    await expect(client.listProjectMembers('u1', 'p1')).resolves.toEqual([]);
+    expect(stubs.projects.listProjectMembers.mock.calls[0][0]).toEqual({ requesterId: 'u1', projectId: 'p1' });
+
+    await expect(client.removeProjectMember('u1', 'p1', 'u2')).resolves.toBeUndefined();
+    expect(stubs.projects.removeProjectMember.mock.calls[0][0]).toEqual({ requesterId: 'u1', projectId: 'p1', userId: 'u2' });
 
     await expect(client.sumSprintHours('p1', 's1')).resolves.toBe(0);
     expect(stubs.workLogs.sumSprintHours.mock.calls[0][0]).toEqual({ projectId: 'p1', sprintId: 's1' });

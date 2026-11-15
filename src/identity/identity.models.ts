@@ -42,6 +42,42 @@ export class ProjectModel {
   description: string;
 }
 
+@ObjectType('ProjectMember')
+export class ProjectMemberModel {
+  @Field(() => ID)
+  id: string;
+
+  @Field()
+  name: string;
+
+  @Field()
+  email: string;
+
+  @Field({ description: 'Role in the workspace: OWNER, ADMIN or MEMBER.' })
+  role: string;
+
+  @Field({ description: 'true when the access comes from an invitation (it can be removed); false for the OWNER and ADMINs.' })
+  invited: boolean;
+}
+
+@InputType()
+export class AddProjectMemberInput {
+  @Field()
+  projectId: string;
+
+  @Field()
+  email: string;
+}
+
+@InputType()
+export class RemoveProjectMemberInput {
+  @Field()
+  projectId: string;
+
+  @Field()
+  userId: string;
+}
+
 @ObjectType()
 export class AuthPayload {
   @Field()

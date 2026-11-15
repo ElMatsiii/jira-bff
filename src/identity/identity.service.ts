@@ -1,9 +1,9 @@
 import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Request } from 'express';
-import { Project, User, WorkLog, Workspace, WorkspaceRole } from 'jira-contracts/gen/ts';
+import { Project, ProjectMember, User, WorkLog, Workspace, WorkspaceRole } from 'jira-contracts/gen/ts';
 import { IdentityGrpcClient } from '../grpc/identity-grpc.client';
-import { LogWorkInput, ProjectModel, UserModel, WorkLogModel, WorkspaceModel } from './identity.models';
+import { LogWorkInput, ProjectMemberModel, ProjectModel, UserModel, WorkLogModel, WorkspaceModel } from './identity.models';
 import { Ms1Operation, translateMs1Error } from './ms1-errors';
 
 interface TokenClaims {
@@ -42,7 +42,15 @@ export const toProjectModel = (project: Project): ProjectModel => ({
   description: project.description,
 });
 
-export const toWorkLogModel = (log: WorkLog): WorkLogModel => ({
+export const toProjectMemberModel = (member: ProjectMember): ProjectMemberModel => ({
+  id: member.user?.id ?? '',
+  name: member.user?.name ?? '',
+  email: member.user?.email ?? '',
+  role: roleName(member.role),
+  invited: member.invited,
+});
+
+export const toWorkLogModel =(log: WorkLog): WorkLogModel => ({
   id: log.id,
   issueId: log.issueId,
   issueKey: log.issueKey,
@@ -119,6 +127,24 @@ export class IdentityService {
     return toUserModel(member);
   }
 
+  /** MS1 checks that the requester is OWNER or ADMIN; the person must already have an account. */
+  async addProjectMember(userId: string, projectId: string, email: string): Promise<ProjectMemberModel> {
+    return toProjectMemberModel(
+      await this.ms1Call('projectMember', () => this.ms1.addProjectMember(userId, projectId, email)));
+  }
+
+  /** Everyone with access to the project: OWNER, ADMINs and invited members (MS1 checks access). */
+  async projectMembers(userId: string, projectId: string): Promise<ProjectMemberModel[]> {
+    const members = await this.ms1Call('projectMember', () => this.ms1.listProjectMembers(userId, projectId));
+    return members.map(toProjectMemberModel);
+  }
+
+  /** MS1 checks that the requester is OWNER or ADMIN and refuses to remove the OWNER or an ADMIN. */
+  async removeProjectMember(userId: string, projectId: string, memberUserId: string): Promise<boolean> {
+    await this.ms1Call('projectMember', () => this.ms1.removeProjectMember(userId, projectId, memberUserId));
+    return true;
+  }
+
   async assertProjectAccess(userId: string, projectId: string): Promise<void> {
     const access = await this.ms1Call('project', () => this.ms1.checkProjectAccess(userId, projectId));
     if (!access.allowed) throw new ForbiddenException('No tienes acceso a este proyecto.');
@@ -134,6 +160,12 @@ export class IdentityService {
   /** Latest 100 entries and the total of the whole project (MS1 checks access). */
   async workLogSummary(userId: string, projectId: string): Promise<{ totalHours: number; entries: WorkLogModel[] }> {
     const summary = await this.ms1Call('workLog', () => this.ms1.listWorkLogs(userId, projectId));
+    return { totalHours: summary.totalHours || 0, entries: (summary.entries || []).map(toWorkLogModel) };
+  }
+
+  /** Latest 100 entries of one issue and its total (MS1 checks access and that the issue is in the project). */
+  async issueWorkLogs(userId: string, projectId: string, issueId: string): Promise<{ totalHours: number; entries: WorkLogModel[] }> {
+    const summary = await this.ms1Call('workLog', () => this.ms1.listWorkLogs(userId, projectId, 0, issueId));
     return { totalHours: summary.totalHours || 0, entries: (summary.entries || []).map(toWorkLogModel) };
   }
 

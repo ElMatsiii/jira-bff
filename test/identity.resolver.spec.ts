@@ -18,6 +18,10 @@ describe('IdentityResolver', () => {
       addMember: jest.fn().mockResolvedValue(user),
       workLogSummary: jest.fn().mockResolvedValue({ totalHours: 0, entries: [] }),
       logWork: jest.fn().mockResolvedValue({ id: 'log-1' }),
+      addProjectMember: jest.fn().mockResolvedValue({ id: 'user-2' }),
+      projectMembers: jest.fn().mockResolvedValue([]),
+      removeProjectMember: jest.fn().mockResolvedValue(true),
+      issueWorkLogs: jest.fn().mockResolvedValue({ totalHours: 0, entries: [] }),
     };
     resolver = new IdentityResolver(identity as unknown as IdentityService);
   });
@@ -39,7 +43,16 @@ describe('IdentityResolver', () => {
     await resolver.projectWorkLogs('p-1', request);
     await resolver.logWork({ projectId: 'p-1', issueId: 'i-1', hours: 1 }, request);
 
-    expect(identity.authenticate).toHaveBeenCalledTimes(7);
+    await resolver.addProjectMember({ projectId: 'p-1', email: 'b@example.com' }, request);
+    await resolver.projectMembers('p-1', request);
+    await expect(resolver.removeProjectMember({ projectId: 'p-1', userId: 'user-2' }, request)).resolves.toBe(true);
+    await resolver.issueWorkLogs('p-1', 'i-1', request);
+
+    expect(identity.authenticate).toHaveBeenCalledTimes(11);
+    expect(identity.addProjectMember).toHaveBeenCalledWith('user-1', 'p-1', 'b@example.com');
+    expect(identity.projectMembers).toHaveBeenCalledWith('user-1', 'p-1');
+    expect(identity.removeProjectMember).toHaveBeenCalledWith('user-1', 'p-1', 'user-2');
+    expect(identity.issueWorkLogs).toHaveBeenCalledWith('user-1', 'p-1', 'i-1');
     expect(identity.workspaces).toHaveBeenCalledWith('user-1');
     expect(identity.projects).toHaveBeenCalledWith('user-1', 'ws-1');
     expect(identity.createProject).toHaveBeenCalledWith('user-1', { workspaceId: 'ws-1', name: 'Portal', key: 'WEB' });

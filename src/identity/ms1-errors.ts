@@ -17,6 +17,7 @@ export const GrpcCode = {
   NOT_FOUND: 5,
   ALREADY_EXISTS: 6,
   PERMISSION_DENIED: 7,
+  FAILED_PRECONDITION: 9,
   UNAVAILABLE: 14,
   UNAUTHENTICATED: 16,
 } as const;
@@ -29,6 +30,7 @@ export type Ms1Operation =
   | 'workspace'
   | 'project'
   | 'addMember'
+  | 'projectMember'
   | 'workLog';
 
 export const MS1_UNAVAILABLE_MESSAGE =
@@ -93,16 +95,26 @@ export function translateMs1Error(err: any, operation: Ms1Operation): HttpExcept
     case GrpcCode.UNAUTHENTICATED:
       return new UnauthorizedException('Email o contraseña incorrectos.');
     case GrpcCode.PERMISSION_DENIED:
+      if (operation === 'projectMember' && !details.includes('project')) {
+        return new ForbiddenException('Solo el OWNER o un ADMIN del espacio pueden gestionar los miembros del proyecto.');
+      }
       return new ForbiddenException(
         operation === 'workLog' || details.includes('project')
           ? 'No tienes acceso a este proyecto.'
           : 'No tienes permisos suficientes en este espacio de trabajo.',
       );
+    case GrpcCode.FAILED_PRECONDITION:
+      return new ConflictException(
+        'El OWNER y los ADMIN del espacio acceden a todos sus proyectos, así que no se pueden quitar de uno.',
+      );
     case GrpcCode.NOT_FOUND:
       if (details.includes('issue not found')) {
         return new NotFoundException('La historia seleccionada no pertenece a este proyecto.');
       }
-      if (operation === 'addMember') {
+      if (details.includes('not a member of this project')) {
+        return new NotFoundException('Esa persona no es miembro de este proyecto.');
+      }
+      if (operation === 'addMember' || operation === 'projectMember') {
         return new NotFoundException('El usuario debe crear una cuenta antes de que puedas agregarlo.');
       }
       if (operation === 'session') return new UnauthorizedException('La cuenta ya no está disponible.');

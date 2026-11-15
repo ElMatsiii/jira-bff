@@ -68,6 +68,14 @@ describe('IssuesResolver', () => {
     expect(result.parentId).toBeUndefined();
   });
 
+  it('exposes the name of who created the issue, or null when MS1 does not know it', async () => {
+    (mockClient.getIssue as jest.Mock).mockResolvedValueOnce({ ...sampleIssue, reporterId: 'user-2', reporterName: 'Ana' });
+    await expect(resolver.getIssue('issue-1', { user: { id: 'user-1' } } as any)).resolves.toMatchObject({ reporterId: 'user-2', reporterName: 'Ana' });
+
+    const result = await resolver.getIssue('issue-1', { user: { id: 'user-1' } } as any);
+    expect(result.reporterName).toBeUndefined();
+  });
+
   it('creates a story under an epic and exposes its parentId', async () => {
     (mockClient.createIssue as jest.Mock).mockResolvedValueOnce({ ...sampleIssue, id: 'story-1', parentId: 'epic-1' });
 

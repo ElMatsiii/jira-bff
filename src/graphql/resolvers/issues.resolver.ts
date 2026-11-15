@@ -108,6 +108,7 @@ export class IssuesResolver {
       parentId: issue.parentId || undefined,
       assigneeId: issue.assigneeId || '',
       reporterId: issue.reporterId || '',
+      reporterName: issue.reporterName || undefined,
       acceptanceCriteria: issue.acceptanceCriteria || '',
       createdAt: issue.createdAt ? new Date(Number(issue.createdAt)).toISOString() : new Date().toISOString(),
       updatedAt: issue.updatedAt ? new Date(Number(issue.updatedAt)).toISOString() : new Date().toISOString(),
