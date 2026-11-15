@@ -29,6 +29,9 @@ export class CreateIssueInput {
 
   @Field({ nullable: true })
   acceptanceCriteria?: string;
+
+  @Field({ nullable: true, description: 'Optional parent epic. MS1 checks it is an EPIC of the same project.' })
+  parentId?: string;
 }
 
 @InputType()

@@ -2,6 +2,7 @@ import { IssuesResolver } from '../src/graphql/resolvers/issues.resolver';
 import { IssuesGrpcClient } from '../src/grpc/issues-grpc.client';
 import { IssueStatusEnum } from '../src/graphql/models/issue.model';
 import { IdentityService } from '../src/identity/identity.service';
+import { SprintsGrpcClient } from '../src/grpc/sprints-grpc.client';
 
 describe('IssuesResolver', () => {
   let resolver: IssuesResolver;
@@ -35,6 +36,8 @@ describe('IssuesResolver', () => {
     resolver = new IssuesResolver(
       mockClient as any,
       { assertProjectAccess: jest.fn().mockResolvedValue(undefined) } as unknown as IdentityService,
+      // The resolver now also needs MS2 (sprint lookup when assigning issues to a sprint).
+      { getSprint: jest.fn().mockResolvedValue({ id: 'sprint-1', projectId: 'proj-1' }) } as unknown as SprintsGrpcClient,
     );
   });
 
@@ -61,7 +64,35 @@ describe('IssuesResolver', () => {
     };
     const result = await resolver.createIssue(input, { user: { id: 'user-1' } } as any);
     expect(result.id).toBe('issue-1');
-    expect(mockClient.createIssue).toHaveBeenCalled();
+    expect(mockClient.createIssue).toHaveBeenCalledWith(expect.objectContaining({ title: 'New Issue', parentId: '' }));
+    expect(result.parentId).toBeUndefined();
+  });
+
+  it('exposes the name of who created the issue, or null when MS1 does not know it', async () => {
+    (mockClient.getIssue as jest.Mock).mockResolvedValueOnce({ ...sampleIssue, reporterId: 'user-2', reporterName: 'Ana' });
+    await expect(resolver.getIssue('issue-1', { user: { id: 'user-1' } } as any)).resolves.toMatchObject({ reporterId: 'user-2', reporterName: 'Ana' });
+
+    const result = await resolver.getIssue('issue-1', { user: { id: 'user-1' } } as any);
+    expect(result.reporterName).toBeUndefined();
+  });
+
+  it('creates a story under an epic and exposes its parentId', async () => {
+    (mockClient.createIssue as jest.Mock).mockResolvedValueOnce({ ...sampleIssue, id: 'story-1', parentId: 'epic-1' });
+
+    const result = await resolver.createIssue({ projectId: 'proj-1', title: 'Historia', parentId: 'epic-1' }, { user: { id: 'user-1' } } as any);
+
+    expect(mockClient.createIssue).toHaveBeenCalledWith(expect.objectContaining({ parentId: 'epic-1' }));
+    expect(result.parentId).toBe('epic-1');
+  });
+
+  it('explains in Spanish why MS1 rejected the parent epic, and passes other errors through', async () => {
+    (mockClient.createIssue as jest.Mock).mockRejectedValueOnce({ code: 5, details: 'parent epic not found: parent epic not found' });
+    await expect(resolver.createIssue({ projectId: 'proj-1', title: 'H', parentId: 'epic-x' }, { user: { id: 'user-1' } } as any))
+      .rejects.toThrow('La épica seleccionada no existe.');
+
+    const other = { code: 13, details: 'boom' };
+    (mockClient.createIssue as jest.Mock).mockRejectedValueOnce(other);
+    await expect(resolver.createIssue({ projectId: 'proj-1', title: 'H' }, { user: { id: 'user-1' } } as any)).rejects.toBe(other);
   });
 
   it('should update an issue status', async () => {

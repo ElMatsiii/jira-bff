@@ -9,6 +9,7 @@ import { GqlAuthGuard } from '../../identity/gql-auth.guard';
 import { IdentityService } from '../../identity/identity.service';
 import { UserModel } from '../../identity/identity.models';
 import { SprintsGrpcClient } from '../../grpc/sprints-grpc.client';
+import { translateParentEpicError } from '../../identity/ms1-errors';
 
 @Resolver(() => IssueModel)
 @UseGuards(GqlAuthGuard)
@@ -57,8 +58,11 @@ export class IssuesResolver {
       assigneeId: input.assigneeId || '',
       reporterId: request.user.id,
       acceptanceCriteria: input.acceptanceCriteria || '',
+      parentId: input.parentId || '',
     };
-    const issue = await this.issuesClient.createIssue(req);
+    const issue = await this.issuesClient.createIssue(req).catch((err) => {
+      throw translateParentEpicError(err);
+    });
     return this.mapToModel(issue);
   }
 
@@ -101,8 +105,10 @@ export class IssuesResolver {
       type: issue.type || 1,
       storyPoints: issue.storyPoints || 0,
       sprintId: issue.sprintId || '',
+      parentId: issue.parentId || undefined,
       assigneeId: issue.assigneeId || '',
       reporterId: issue.reporterId || '',
+      reporterName: issue.reporterName || undefined,
       acceptanceCriteria: issue.acceptanceCriteria || '',
       createdAt: issue.createdAt ? new Date(Number(issue.createdAt)).toISOString() : new Date().toISOString(),
       updatedAt: issue.updatedAt ? new Date(Number(issue.updatedAt)).toISOString() : new Date().toISOString(),

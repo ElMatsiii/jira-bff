@@ -58,7 +58,9 @@ describe('SprintsResolver', () => {
     };
     const result = await resolver.createSprint(input, { user: { id: 'user-1' } } as any);
     expect(result.id).toBe('sprint-1');
-    expect(mockClient.createSprint).toHaveBeenCalled();
+    expect(mockClient.createSprint).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Sprint 2', capacityStoryPoints: 0 }),
+    );
   });
 
   it('should start a sprint', async () => {

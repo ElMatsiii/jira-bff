@@ -1,7 +1,10 @@
 import { Args, Context, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Request } from 'express';
 import {
+  AddProjectMemberInput,
   AddWorkspaceMemberInput,
+  ProjectMemberModel,
+  RemoveProjectMemberInput,
   AuthPayload,
   CreateProjectInput,
   LogWorkInput,
@@ -67,6 +70,43 @@ export class IdentityResolver {
   ): Promise<UserModel> {
     const user = await this.identity.authenticate(request);
     return this.identity.addMember(user.id, input.workspaceId, input.email);
+  }
+
+  @Mutation(() => ProjectMemberModel)
+  async addProjectMember(
+    @Args('input') input: AddProjectMemberInput,
+    @Context('req') request: AuthenticatedRequest,
+  ): Promise<ProjectMemberModel> {
+    const user = await this.identity.authenticate(request);
+    return this.identity.addProjectMember(user.id, input.projectId, input.email);
+  }
+
+  @Query(() => [ProjectMemberModel])
+  async projectMembers(
+    @Args('projectId') projectId: string,
+    @Context('req') request: AuthenticatedRequest,
+  ): Promise<ProjectMemberModel[]> {
+    const user = await this.identity.authenticate(request);
+    return this.identity.projectMembers(user.id, projectId);
+  }
+
+  @Mutation(() => Boolean)
+  async removeProjectMember(
+    @Args('input') input: RemoveProjectMemberInput,
+    @Context('req') request: AuthenticatedRequest,
+  ): Promise<boolean> {
+    const user = await this.identity.authenticate(request);
+    return this.identity.removeProjectMember(user.id, input.projectId, input.userId);
+  }
+
+  @Query(() => WorkLogSummaryModel)
+  async issueWorkLogs(
+    @Args('projectId') projectId: string,
+    @Args('issueId') issueId: string,
+    @Context('req') request: AuthenticatedRequest,
+  ): Promise<{ totalHours: number; entries: WorkLogModel[] }> {
+    const user = await this.identity.authenticate(request);
+    return this.identity.issueWorkLogs(user.id, projectId, issueId);
   }
 
   @Query(() => WorkLogSummaryModel)
