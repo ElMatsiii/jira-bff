@@ -31,7 +31,10 @@ describe('SprintsResolver', () => {
     };
     resolver = new SprintsResolver(
       mockClient as any,
-      { assertProjectAccess: jest.fn().mockResolvedValue(undefined) } as unknown as IdentityService,
+      {
+        assertProjectAccess: jest.fn().mockResolvedValue(undefined),
+        assertSprintManagementAccess: jest.fn().mockResolvedValue(undefined),
+      } as unknown as IdentityService,
     );
   });
 
@@ -55,11 +58,12 @@ describe('SprintsResolver', () => {
       projectId: 'proj-1',
       name: 'Sprint 2',
       goal: 'Deliver v2',
+      capacityStoryPoints: 20,
     };
     const result = await resolver.createSprint(input, { user: { id: 'user-1' } } as any);
     expect(result.id).toBe('sprint-1');
     expect(mockClient.createSprint).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Sprint 2', capacityStoryPoints: 0 }),
+      expect.objectContaining({ name: 'Sprint 2', capacityStoryPoints: 20 }),
     );
   });
 

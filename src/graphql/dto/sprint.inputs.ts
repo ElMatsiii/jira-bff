@@ -1,4 +1,4 @@
-import { Field, InputType } from '@nestjs/graphql';
+import { Field, InputType, Int } from '@nestjs/graphql';
 
 @InputType()
 export class CreateSprintInput {
@@ -16,4 +16,7 @@ export class CreateSprintInput {
 
   @Field(() => String, { nullable: true })
   endDate?: string;
+
+  @Field(() => Int, { nullable: true })
+  capacityStoryPoints?: number;
 }

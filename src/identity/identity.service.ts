@@ -150,6 +150,15 @@ export class IdentityService {
     if (!access.allowed) throw new ForbiddenException('No tienes acceso a este proyecto.');
   }
 
+  async assertSprintManagementAccess(userId: string, projectId: string): Promise<void> {
+    const access = await this.ms1Call('project', () => this.ms1.checkProjectAccess(userId, projectId));
+    if (!access.allowed) throw new ForbiddenException('No tienes acceso a este proyecto.');
+    const role = roleName(access.role);
+    if (role !== 'OWNER' && role !== 'ADMIN') {
+      throw new ForbiddenException('Solo el OWNER o un ADMIN del proyecto pueden gestionar los sprints.');
+    }
+  }
+
   /** MS1 checks project access and that the issue belongs to the project. */
   async logWork(userId: string, input: LogWorkInput): Promise<WorkLogModel> {
     const log = await this.ms1Call('workLog', () =>

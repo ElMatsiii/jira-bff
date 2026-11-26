@@ -42,15 +42,14 @@ export class SprintsResolver {
     @Args('input') input: CreateSprintInput,
     @Context('req') request: Request & { user: UserModel },
   ): Promise<SprintModel> {
-    await this.identity.assertProjectAccess(request.user.id, input.projectId);
+    await this.identity.assertSprintManagementAccess(request.user.id, input.projectId);
     const req: CreateSprintRequest = {
       projectId: input.projectId,
       name: input.name,
       goal: input.goal || '',
       startDate: input.startDate ? new Date(input.startDate).getTime() : Date.now(),
       endDate: input.endDate ? new Date(input.endDate).getTime() : Date.now() + 14 * 86400000,
-      // 0 = capacity not defined, until the capacity step exposes it in GraphQL.
-      capacityStoryPoints: 0,
+      capacityStoryPoints: input.capacityStoryPoints || 0,
     };
     const sprint = await this.sprintsClient.createSprint(req);
     return this.mapToModel(sprint);
@@ -62,7 +61,7 @@ export class SprintsResolver {
     @Context('req') request: Request & { user: UserModel },
   ): Promise<SprintModel> {
     const current = await this.sprintsClient.getSprint(id);
-    await this.identity.assertProjectAccess(request.user.id, current.projectId);
+    await this.identity.assertSprintManagementAccess(request.user.id, current.projectId);
     const sprint = await this.sprintsClient.startSprint(id);
     return this.mapToModel(sprint);
   }
@@ -73,7 +72,7 @@ export class SprintsResolver {
     @Context('req') request: Request & { user: UserModel },
   ): Promise<SprintModel> {
     const current = await this.sprintsClient.getSprint(id);
-    await this.identity.assertProjectAccess(request.user.id, current.projectId);
+    await this.identity.assertSprintManagementAccess(request.user.id, current.projectId);
     const sprint = await this.sprintsClient.completeSprint(id);
     return this.mapToModel(sprint);
   }
@@ -89,6 +88,7 @@ export class SprintsResolver {
       status: (sprint.status as unknown) as SprintStatusEnum,
       totalStoryPoints: sprint.totalStoryPoints || 0,
       completedStoryPoints: sprint.completedStoryPoints || 0,
+      capacityStoryPoints: sprint.capacityStoryPoints || 0,
     };
   }
 }

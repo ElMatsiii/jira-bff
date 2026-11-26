@@ -178,6 +178,18 @@ describe('IdentityService (MS1 over gRPC)', () => {
       ms1.checkProjectAccess.mockResolvedValue({ allowed: false, role: 0, workspaceId: '' });
       await expect(service.assertProjectAccess('user-9', 'p-1')).rejects.toThrow(new ForbiddenException('No tienes acceso a este proyecto.'));
     });
+
+    it('restricts sprint management to OWNER and ADMIN', async () => {
+      ms1.checkProjectAccess.mockResolvedValue({ allowed: true, role: WorkspaceRole.WORKSPACE_ROLE_OWNER, workspaceId: 'ws-1' });
+      await expect(service.assertSprintManagementAccess('user-1', 'p-1')).resolves.toBeUndefined();
+
+      ms1.checkProjectAccess.mockResolvedValue({ allowed: true, role: WorkspaceRole.WORKSPACE_ROLE_ADMIN, workspaceId: 'ws-1' });
+      await expect(service.assertSprintManagementAccess('user-2', 'p-1')).resolves.toBeUndefined();
+
+      ms1.checkProjectAccess.mockResolvedValue({ allowed: true, role: WorkspaceRole.WORKSPACE_ROLE_MEMBER, workspaceId: 'ws-1' });
+      await expect(service.assertSprintManagementAccess('user-3', 'p-1'))
+        .rejects.toThrow('Solo el OWNER o un ADMIN del proyecto pueden gestionar los sprints.');
+    });
   });
 
   describe('work logs', () => {

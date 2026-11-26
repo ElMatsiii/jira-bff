@@ -41,4 +41,7 @@ export class SprintModel {
 
   @Field(() => Int, { defaultValue: 0 })
   completedStoryPoints: number;
+
+  @Field(() => Int, { defaultValue: 0 })
+  capacityStoryPoints: number;
 }
