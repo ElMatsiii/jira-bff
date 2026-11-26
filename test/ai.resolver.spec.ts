@@ -309,4 +309,58 @@ describe('AiResolver', () => {
       expect(result).toEqual({ storyPoints: 2, confidence: 0, reasoning: '', complexityFactors: [], acceptanceCriteriaGherkin: 'Feature: X' });
     });
   });
+
+  describe('aiProjectRetrospective', () => {
+    it('fetches project trend and generates retrospective from MCP agent', async () => {
+      (mockAnalyticsClient as any).getProjectTrend = jest.fn().mockResolvedValueOnce({
+        projectId: 'project-1',
+        velocity: 20,
+        velocitySampleSize: 2,
+        totalPoints: 40,
+        completedPoints: 38,
+        velocityHistory: [
+          {
+            sprintId: 'sp-1',
+            sprintName: 'Sprint 1',
+            committedStoryPoints: 20,
+            completedStoryPoints: 18,
+            completedDate: '2026-11-01T00:00:00Z',
+          },
+        ],
+      });
+
+      (mockMcpClient as any).projectRetrospective = jest.fn().mockResolvedValueOnce({
+        projectId: 'project-1',
+        summary: 'Resumen retrospectiva',
+        strengths: ['Alta velocidad'],
+        areasForImprovement: ['Refinar estimaciones'],
+        actionableRecommendations: ['Continuar con el ritmo'],
+      });
+
+      const result = await resolver.aiProjectRetrospective({ projectId: 'project-1', projectKey: 'PROJ' }, { user: { id: 'user-1' } } as any);
+
+      expect(mockIdentity.assertProjectAccess).toHaveBeenCalledWith('user-1', 'project-1');
+      expect((mockAnalyticsClient as any).getProjectTrend).toHaveBeenCalledWith('project-1');
+      expect((mockMcpClient as any).projectRetrospective).toHaveBeenCalledWith({
+        projectId: 'project-1',
+        projectKey: 'PROJ',
+        velocityHistory: [
+          {
+            sprintId: 'sp-1',
+            sprintName: 'Sprint 1',
+            committedStoryPoints: 20,
+            completedStoryPoints: 18,
+            completedDate: '2026-11-01T00:00:00Z',
+          },
+        ],
+      });
+      expect(result).toEqual({
+        projectId: 'project-1',
+        summary: 'Resumen retrospectiva',
+        strengths: ['Alta velocidad'],
+        areasForImprovement: ['Refinar estimaciones'],
+        actionableRecommendations: ['Continuar con el ritmo'],
+      });
+    });
+  });
 });

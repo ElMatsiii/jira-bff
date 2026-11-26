@@ -94,6 +94,14 @@ export interface AiBreakdownTaskResult {
   subtasks: AiSuggestedSubtask[];
 }
 
+export interface AiProjectRetrospectiveResult {
+  projectId: string;
+  summary: string;
+  strengths: string[];
+  areasForImprovement: string[];
+  actionableRecommendations: string[];
+}
+
 @Injectable()
 export class McpAgentClient {
   constructor(@Optional() private readonly configService?: ConfigService) {}
@@ -149,5 +157,19 @@ export class McpAgentClient {
     projectKey?: string;
   }): Promise<AiBreakdownTaskResult> {
     return this.post('/agent/breakdown-task', input, 'segmentación de subtareas');
+  }
+
+  async projectRetrospective(input: {
+    projectId: string;
+    projectKey?: string;
+    velocityHistory?: {
+      sprintId: string;
+      sprintName: string;
+      committedStoryPoints: number;
+      completedStoryPoints: number;
+      completedDate: string;
+    }[];
+  }): Promise<AiProjectRetrospectiveResult> {
+    return this.post('/agent/project-retrospective', input, 'retrospectiva de proyecto');
   }
 }

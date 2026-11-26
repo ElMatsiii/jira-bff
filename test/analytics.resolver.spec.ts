@@ -97,6 +97,53 @@ describe('AnalyticsResolver', () => {
     });
   });
 
+  describe('getProjectVelocityTrend', () => {
+    it('returns project velocity trend when available', async () => {
+      (mockClient as any).getProjectTrend = jest.fn().mockResolvedValueOnce({
+        projectId: 'project-1',
+        velocity: 25.5,
+        velocitySampleSize: 3,
+        totalPoints: 60,
+        completedPoints: 50,
+        velocityHistory: [
+          {
+            sprintId: 'sp-1',
+            sprintName: 'Sprint 1',
+            committedStoryPoints: 30,
+            completedStoryPoints: 25,
+            completedDate: '2026-11-01T00:00:00Z',
+          },
+        ],
+      });
+
+      const result = await resolver.getProjectVelocityTrend('project-1', user);
+      expect(mockIdentity.assertProjectAccess).toHaveBeenCalledWith('user-1', 'project-1');
+      expect((mockClient as any).getProjectTrend).toHaveBeenCalledWith('project-1');
+      expect(result).toEqual({
+        projectId: 'project-1',
+        velocity: 25.5,
+        velocitySampleSize: 3,
+        totalPoints: 60,
+        completedPoints: 50,
+        velocityHistory: [
+          {
+            sprintId: 'sp-1',
+            sprintName: 'Sprint 1',
+            committedStoryPoints: 30,
+            completedStoryPoints: 25,
+            completedDate: '2026-11-01T00:00:00Z',
+          },
+        ],
+      });
+    });
+
+    it('returns null when MS3 trend is null', async () => {
+      (mockClient as any).getProjectTrend = jest.fn().mockResolvedValueOnce(null);
+      const result = await resolver.getProjectVelocityTrend('project-1', user);
+      expect(result).toBeNull();
+    });
+  });
+
   describe('pickReferenceSprint', () => {
     it('prefers the active sprint, then the latest completed, then the latest non-cancelled', () => {
       const completedOld = sprint('c-old', SprintStatus.SPRINT_STATUS_COMPLETED, 100);

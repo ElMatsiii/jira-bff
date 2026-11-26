@@ -5,8 +5,8 @@ import { McpAgentClient } from '../../mcp/mcp-agent.client';
 import { IssuesGrpcClient } from '../../grpc/issues-grpc.client';
 import { SprintsGrpcClient } from '../../grpc/sprints-grpc.client';
 import { KafkaAnalyticsClient } from '../../kafka/kafka-analytics.client';
-import { AiDecompositionModel, AiSprintPlanModel, AiDiagnosisModel, AiStoryImprovementModel, AiBreakdownTaskModel } from '../models/ai.model';
-import { DecomposeEpicInput, PlanSprintInput, DiagnoseMetricsInput, ImproveStoryInput, BreakdownTaskInput } from '../dto/ai.inputs';
+import { AiDecompositionModel, AiSprintPlanModel, AiDiagnosisModel, AiStoryImprovementModel, AiBreakdownTaskModel, AiProjectRetrospectiveModel } from '../models/ai.model';
+import { DecomposeEpicInput, PlanSprintInput, DiagnoseMetricsInput, ImproveStoryInput, BreakdownTaskInput, ProjectRetrospectiveInput } from '../dto/ai.inputs';
 import { GqlAuthGuard } from '../../identity/gql-auth.guard';
 import { IdentityService } from '../../identity/identity.service';
 import { UserModel } from '../../identity/identity.models';
@@ -206,6 +206,28 @@ export class AiResolver {
         estimatedStoryPoints: st.estimatedStoryPoints || 3,
         acceptanceCriteriaGherkin: st.acceptanceCriteriaGherkin || '',
       })),
+    };
+  }
+
+  @Mutation(() => AiProjectRetrospectiveModel, { name: 'aiProjectRetrospective' })
+  async aiProjectRetrospective(
+    @Args('input') input: ProjectRetrospectiveInput,
+    @Context('req') request: Request & { user: UserModel },
+  ): Promise<AiProjectRetrospectiveModel> {
+    await this.identity.assertProjectAccess(request.user.id, input.projectId);
+    const trend = await this.analyticsClient.getProjectTrend(input.projectId);
+    const res = await this.mcpClient.projectRetrospective({
+      projectId: input.projectId,
+      projectKey: input.projectKey,
+      velocityHistory: trend?.velocityHistory || [],
+    });
+
+    return {
+      projectId: res.projectId || input.projectId,
+      summary: res.summary || '',
+      strengths: res.strengths || [],
+      areasForImprovement: res.areasForImprovement || [],
+      actionableRecommendations: res.actionableRecommendations || [],
     };
   }
 }

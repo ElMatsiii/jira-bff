@@ -1,4 +1,4 @@
-import { Field, Float, Int, ObjectType } from '@nestjs/graphql';
+import { Field, Float, ID, Int, ObjectType } from '@nestjs/graphql';
 
 @ObjectType('AiStory')
 export class AiStoryModel {
@@ -109,4 +109,22 @@ export class AiBreakdownTaskModel {
 
   @Field(() => [AiSuggestedSubtaskModel])
   subtasks: AiSuggestedSubtaskModel[];
+}
+
+@ObjectType('AiProjectRetrospective')
+export class AiProjectRetrospectiveModel {
+  @Field(() => ID)
+  projectId: string;
+
+  @Field()
+  summary: string;
+
+  @Field(() => [String])
+  strengths: string[];
+
+  @Field(() => [String])
+  areasForImprovement: string[];
+
+  @Field(() => [String])
+  actionableRecommendations: string[];
 }

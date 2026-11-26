@@ -3,7 +3,7 @@ import { UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { Sprint, SprintStatus } from 'jira-contracts/gen/ts';
 import { KafkaAnalyticsClient } from '../../kafka/kafka-analytics.client';
-import { AnalyticsModel } from '../models/analytics.model';
+import { AnalyticsModel, ProjectVelocityTrendModel } from '../models/analytics.model';
 import { GqlAuthGuard } from '../../identity/gql-auth.guard';
 import { IdentityService } from '../../identity/identity.service';
 import { UserModel } from '../../identity/identity.models';
@@ -65,5 +65,23 @@ export class AnalyticsResolver {
     const reference = pickReferenceSprint(await this.sprintsClient.listSprints(projectId));
     if (!reference) return null;
     return this.analyticsClient.getVelocity(reference.id, projectId);
+  }
+
+  @Query(() => ProjectVelocityTrendModel, { name: 'getProjectVelocityTrend', nullable: true })
+  async getProjectVelocityTrend(
+    @Args('projectId') projectId: string,
+    @Context('req') request: Request & { user: UserModel },
+  ): Promise<ProjectVelocityTrendModel | null> {
+    await this.identity.assertProjectAccess(request.user.id, projectId);
+    const trend = await this.analyticsClient.getProjectTrend(projectId);
+    if (!trend) return null;
+    return {
+      projectId: trend.projectId,
+      velocity: trend.velocity,
+      velocitySampleSize: trend.velocitySampleSize,
+      totalPoints: trend.totalPoints,
+      completedPoints: trend.completedPoints,
+      velocityHistory: trend.velocityHistory,
+    };
   }
 }

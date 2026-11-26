@@ -17,7 +17,24 @@ export const ANALYTICS_REPLY_TOPIC = 'analytics.reply';
 export const ANALYTICS_REPLY_TIMEOUT_MS = 5000;
 
 /** queryType values accepted by jira-contracts/schemas/analytics.query.json. */
-export type AnalyticsQueryType = 'BURNDOWN' | 'VELOCITY';
+export type AnalyticsQueryType = 'BURNDOWN' | 'VELOCITY' | 'PROJECT_TREND';
+
+export interface VelocityHistoryItem {
+  sprintId: string;
+  sprintName: string;
+  committedStoryPoints: number;
+  completedStoryPoints: number;
+  completedDate: string;
+}
+
+export interface ProjectTrendResult {
+  projectId: string;
+  velocity: number;
+  velocitySampleSize: number | null;
+  totalPoints: number;
+  completedPoints: number;
+  velocityHistory: VelocityHistoryItem[];
+}
 
 /** One day of the burndown, as the BFF uses it (local model, not MS3's DTO). */
 export interface BurndownPoint {
@@ -49,13 +66,24 @@ export interface AnalyticsResult {
 interface AnalyticsReply {
   correlationId?: string;
   sprintId?: string;
+  projectId?: string;
+  queryType?: string;
   status?: 'SUCCESS' | 'FAILED' | string;
   errorMessage?: string | null;
+  totalPoints?: number;
+  completedPoints?: number;
   velocity?: number;
   velocitySampleSize?: number;
   healthScore?: number;
   healthStatus?: string;
   burndownData?: { date?: string; dayIndex?: number; idealRemaining?: number; actualRemaining?: number | null }[];
+  velocityHistory?: {
+    sprintId: string;
+    sprintName: string;
+    committedStoryPoints: number;
+    completedStoryPoints: number;
+    completedDate: string;
+  }[];
 }
 
 type PendingRequest = { resolve: (reply: AnalyticsReply | null) => void; timer: NodeJS.Timeout };
@@ -138,14 +166,15 @@ export class KafkaAnalyticsClient implements OnModuleInit, OnModuleDestroy {
    * Kafka request-reply towards MS3 (jira-analytics-dotnet). Resolves to the raw reply, or null
    * when Kafka is down, the send fails or MS3 does not answer in time.
    */
-  private request(sprintId: string, queryType: AnalyticsQueryType, projectId?: string): Promise<AnalyticsReply | null> {
+  private request(sprintId: string | undefined, queryType: AnalyticsQueryType, projectId?: string): Promise<AnalyticsReply | null> {
     if (!this.isConnected || !this.producer) return Promise.resolve(null);
 
     return new Promise((resolve) => {
       const correlationId = randomUUID();
+      const messageKey = sprintId || projectId || correlationId;
       const timer = setTimeout(() => {
         this.pendingRequests.delete(correlationId);
-        this.logger.warn(`No analytics.reply from MS3 within ${this.replyTimeoutMs} ms (sprint ${sprintId}, ${queryType})`);
+        this.logger.warn(`No analytics.reply from MS3 within ${this.replyTimeoutMs} ms (key ${messageKey}, ${queryType})`);
         resolve(null);
       }, this.replyTimeoutMs);
       this.pendingRequests.set(correlationId, { resolve, timer });
@@ -155,7 +184,7 @@ export class KafkaAnalyticsClient implements OnModuleInit, OnModuleDestroy {
         queryId: randomUUID(),
         correlationId,
         replyTopic: ANALYTICS_REPLY_TOPIC,
-        sprintId,
+        ...(sprintId ? { sprintId } : {}),
         ...(projectId ? { projectId } : {}),
         queryType,
         timestamp: new Date().toISOString(),
@@ -164,7 +193,7 @@ export class KafkaAnalyticsClient implements OnModuleInit, OnModuleDestroy {
       this.producer!
         .send({
           topic: ANALYTICS_QUERY_TOPIC,
-          messages: [{ key: sprintId, value: JSON.stringify(query), headers: { kafka_correlationId: correlationId } }],
+          messages: [{ key: messageKey, value: JSON.stringify(query), headers: { kafka_correlationId: correlationId } }],
         })
         .catch((err) => {
           clearTimeout(timer);
@@ -186,6 +215,33 @@ export class KafkaAnalyticsClient implements OnModuleInit, OnModuleDestroy {
       return null;
     }
     return reply.velocity;
+  }
+
+  /** Historical velocity trend of all closed sprints in the project from MS3 (queryType PROJECT_TREND). */
+  async getProjectTrend(projectId: string): Promise<ProjectTrendResult | null> {
+    const reply = await this.request(undefined, 'PROJECT_TREND', projectId);
+    if (!reply || reply.status !== 'SUCCESS') {
+      return null;
+    }
+    return {
+      projectId,
+      velocity: isFiniteNumber(reply.velocity) ? reply.velocity : 0,
+      velocitySampleSize:
+        Number.isInteger(reply.velocitySampleSize) && (reply.velocitySampleSize as number) >= 0
+          ? (reply.velocitySampleSize as number)
+          : null,
+      totalPoints: typeof reply.totalPoints === 'number' ? reply.totalPoints : 0,
+      completedPoints: typeof reply.completedPoints === 'number' ? reply.completedPoints : 0,
+      velocityHistory: Array.isArray(reply.velocityHistory)
+        ? reply.velocityHistory.map((v) => ({
+            sprintId: v.sprintId,
+            sprintName: v.sprintName || '',
+            committedStoryPoints: v.committedStoryPoints || 0,
+            completedStoryPoints: v.completedStoryPoints || 0,
+            completedDate: v.completedDate || '',
+          }))
+        : [],
+    };
   }
 }
 

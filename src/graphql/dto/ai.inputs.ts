@@ -68,3 +68,12 @@ export class BreakdownTaskInput {
   @Field({ nullable: true })
   description?: string;
 }
+
+@InputType()
+export class ProjectRetrospectiveInput {
+  @Field()
+  projectId: string;
+
+  @Field({ nullable: true })
+  projectKey?: string;
+}
