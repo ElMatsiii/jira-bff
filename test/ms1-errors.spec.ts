@@ -8,7 +8,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { MS1_UNAVAILABLE_MESSAGE, translateMs1Error, translateParentEpicError } from '../src/identity/ms1-errors';
+import { MS1_UNAVAILABLE_MESSAGE, translateMs1Error, translateParentEpicError, translateStatusUpdateError } from '../src/identity/ms1-errors';
 
 const grpcError = (code: number, details: string) => ({ code, details, message: `${code} X: ${details}` });
 
@@ -70,5 +70,23 @@ describe('translateParentEpicError', () => {
   it('leaves any other error untouched', () => {
     const other = grpcError(3, 'title cannot be empty');
     expect(translateParentEpicError(other)).toBe(other);
+  });
+});
+
+describe('translateStatusUpdateError', () => {
+  it('translates concurrency abort and invalid status transitions into Spanish messages', () => {
+    expect(translateStatusUpdateError(grpcError(10, 'issue changed while updating status; retry')))
+      .toEqual(new BadRequestException('La incidencia cambió mientras la movías, vuelve a intentarlo.'));
+    expect(translateStatusUpdateError(grpcError(9, 'cannot transition from TODO to DONE')))
+      .toEqual(new BadRequestException('No se puede mover la incidencia a ese estado.'));
+    expect(translateStatusUpdateError(grpcError(3, 'invalid status 99')))
+      .toEqual(new BadRequestException('No se puede mover la incidencia a ese estado.'));
+    expect(translateStatusUpdateError(grpcError(5, 'issue not found: 123')))
+      .toEqual(new NotFoundException('La incidencia seleccionada no existe.'));
+  });
+
+  it('leaves other errors untouched', () => {
+    const other = grpcError(14, 'No connection established');
+    expect(translateStatusUpdateError(other)).toBe(other);
   });
 });

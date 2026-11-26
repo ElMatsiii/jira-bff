@@ -9,7 +9,7 @@ import { GqlAuthGuard } from '../../identity/gql-auth.guard';
 import { IdentityService } from '../../identity/identity.service';
 import { UserModel } from '../../identity/identity.models';
 import { SprintsGrpcClient } from '../../grpc/sprints-grpc.client';
-import { translateParentEpicError } from '../../identity/ms1-errors';
+import { translateParentEpicError, translateStatusUpdateError } from '../../identity/ms1-errors';
 
 @Resolver(() => IssueModel)
 @UseGuards(GqlAuthGuard)
@@ -71,9 +71,13 @@ export class IssuesResolver {
     @Args('input') input: UpdateIssueStatusInput,
     @Context('req') request: Request & { user: UserModel },
   ): Promise<IssueModel> {
-    const currentIssue = await this.issuesClient.getIssue(input.id);
+    const currentIssue = await this.issuesClient.getIssue(input.id).catch((err) => {
+      throw translateStatusUpdateError(err);
+    });
     await this.identity.assertProjectAccess(request.user.id, currentIssue.projectId);
-    const issue = await this.issuesClient.updateIssueStatus(input.id, input.status as number);
+    const issue = await this.issuesClient.updateIssueStatus(input.id, input.status as number).catch((err) => {
+      throw translateStatusUpdateError(err);
+    });
     return this.mapToModel(issue);
   }
 

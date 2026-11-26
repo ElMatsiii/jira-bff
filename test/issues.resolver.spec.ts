@@ -104,4 +104,14 @@ describe('IssuesResolver', () => {
     expect(result.status).toBe(IssueStatusEnum.IN_PROGRESS);
     expect(mockClient.updateIssueStatus).toHaveBeenCalledWith('issue-1', 2);
   });
+
+  it('translates concurrency abort and transition errors when updating status', async () => {
+    (mockClient.updateIssueStatus as jest.Mock).mockRejectedValueOnce({
+      code: 10,
+      details: 'issue changed while updating status; retry',
+    });
+    await expect(
+      resolver.updateIssueStatus({ id: 'issue-1', status: IssueStatusEnum.DONE }, { user: { id: 'user-1' } } as any),
+    ).rejects.toThrow('La incidencia cambió mientras la movías, vuelve a intentarlo.');
+  });
 });

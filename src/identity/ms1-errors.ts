@@ -18,6 +18,7 @@ export const GrpcCode = {
   ALREADY_EXISTS: 6,
   PERMISSION_DENIED: 7,
   FAILED_PRECONDITION: 9,
+  ABORTED: 10,
   UNAVAILABLE: 14,
   UNAUTHENTICATED: 16,
 } as const;
@@ -72,6 +73,29 @@ export function translateParentEpicError(err: any): unknown {
   }
   if (err?.code === GrpcCode.INVALID_ARGUMENT && details.includes('invalid parent epic')) {
     return new BadRequestException('La épica padre debe ser de tipo EPIC y pertenecer al mismo proyecto.');
+  }
+  return err;
+}
+
+/**
+ * updateIssueStatus: translates MS1 errors (concurrency conflict ABORTED or invalid state FAILED_PRECONDITION)
+ * into Spanish user-friendly messages for the board / frontend.
+ */
+export function translateStatusUpdateError(err: any): unknown {
+  const details = detailsOf(err);
+  if (err?.code === GrpcCode.ABORTED || details.includes('changed while updating')) {
+    return new BadRequestException('La incidencia cambió mientras la movías, vuelve a intentarlo.');
+  }
+  if (
+    err?.code === GrpcCode.FAILED_PRECONDITION ||
+    err?.code === GrpcCode.INVALID_ARGUMENT ||
+    details.includes('cannot transition') ||
+    details.includes('invalid status')
+  ) {
+    return new BadRequestException('No se puede mover la incidencia a ese estado.');
+  }
+  if (err?.code === GrpcCode.NOT_FOUND || details.includes('issue not found')) {
+    return new NotFoundException('La incidencia seleccionada no existe.');
   }
   return err;
 }
