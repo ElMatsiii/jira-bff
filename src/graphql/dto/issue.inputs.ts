@@ -45,8 +45,8 @@ export class UpdateIssueStatusInput {
 
 @InputType()
 export class AssignIssuesToSprintInput {
-  @Field()
-  sprintId: string;
+  @Field({ nullable: true })
+  sprintId?: string;
 
   @Field(() => [String])
   issueIds: string[];

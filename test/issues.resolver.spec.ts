@@ -32,6 +32,7 @@ describe('IssuesResolver', () => {
       listIssues: jest.fn().mockResolvedValue([sampleIssue]),
       createIssue: jest.fn().mockResolvedValue(sampleIssue),
       updateIssueStatus: jest.fn().mockResolvedValue({ ...sampleIssue, status: 2 }),
+      assignIssuesToSprint: jest.fn().mockResolvedValue([sampleIssue]),
     };
     resolver = new IssuesResolver(
       mockClient as any,
@@ -113,5 +114,23 @@ describe('IssuesResolver', () => {
     await expect(
       resolver.updateIssueStatus({ id: 'issue-1', status: IssueStatusEnum.DONE }, { user: { id: 'user-1' } } as any),
     ).rejects.toThrow('La incidencia cambió mientras la movías, vuelve a intentarlo.');
+  });
+
+  it('assigns issues to sprint when sprintId is provided', async () => {
+    const result = await resolver.assignIssuesToSprint(
+      { issueIds: ['issue-1'], sprintId: 'sprint-1' },
+      { user: { id: 'user-1' } } as any,
+    );
+    expect(result).toHaveLength(1);
+    expect(mockClient.assignIssuesToSprint).toHaveBeenCalledWith(['issue-1'], 'sprint-1');
+  });
+
+  it('unassigns issues from sprint (moves to backlog) when sprintId is empty', async () => {
+    const result = await resolver.assignIssuesToSprint(
+      { issueIds: ['issue-1'], sprintId: '' },
+      { user: { id: 'user-1' } } as any,
+    );
+    expect(result).toHaveLength(1);
+    expect(mockClient.assignIssuesToSprint).toHaveBeenCalledWith(['issue-1'], '');
   });
 });

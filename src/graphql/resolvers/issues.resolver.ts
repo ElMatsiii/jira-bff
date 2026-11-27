@@ -87,13 +87,22 @@ export class IssuesResolver {
     @Context('req') request: Request & { user: UserModel },
   ): Promise<IssueModel[]> {
     if (!input.issueIds.length) return [];
-    const sprint = await this.sprintsClient.getSprint(input.sprintId);
-    await this.identity.assertProjectAccess(request.user.id, sprint.projectId);
+    const targetSprintId = input.sprintId?.trim() || '';
     const issues = await Promise.all(input.issueIds.map((id) => this.issuesClient.getIssue(id)));
-    if (issues.some((issue) => issue.projectId !== sprint.projectId)) {
-      throw new BadRequestException('Todas las historias deben pertenecer al proyecto del sprint.');
+
+    if (targetSprintId) {
+      const sprint = await this.sprintsClient.getSprint(targetSprintId);
+      await this.identity.assertProjectAccess(request.user.id, sprint.projectId);
+      if (issues.some((issue) => issue.projectId !== sprint.projectId)) {
+        throw new BadRequestException('Todas las historias deben pertenecer al proyecto del sprint.');
+      }
+    } else {
+      for (const issue of issues) {
+        await this.identity.assertProjectAccess(request.user.id, issue.projectId);
+      }
     }
-    const updated = await this.issuesClient.assignIssuesToSprint(input.issueIds, input.sprintId);
+
+    const updated = await this.issuesClient.assignIssuesToSprint(input.issueIds, targetSprintId);
     return updated.map((issue) => this.mapToModel(issue));
   }
 
